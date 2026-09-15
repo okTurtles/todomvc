@@ -30,7 +30,7 @@ import {
   serializeKey
 } from '@chelonia/crypto'
 import { API_URL, CONTRACT_NAME } from './config.js'
-import { createList, currentLists, loadLists, retainOrSync } from './lists.js'
+import { createList, currentLists, keyIdByName, loadLists, retainOrSync } from './lists.js'
 import { dropPendingWrites, loadOfflineQueue } from './offline.js'
 import { clearSavedState, persistState, state } from './state.js'
 
@@ -114,19 +114,27 @@ async function registerSalt (username, password) {
   return [contractSalt, decryptContractSalt(encryptionKey, encryptedToken)]
 }
 
-// The other half: prove the password for an existing account and get the same
-// salt back. The second element is the CID anchoring previously rotated keys,
-// which only matters once an app supports password changes.
-async function retrieveSalt (identityContractID, password) {
-  const r = randomNonce()
-  const contract = encodeURIComponent(identityContractID)
-
+// Prove a password against `/zkpp/:contractID/auth_hash`. Login, changing the
+// password and deleting the account all start here; `c` is the shared secret
+// the answer comes back encrypted to.
+async function provePassword (identityContractID, password) {
+  const nonce = randomNonce()
   const { authSalt, s, sig } = await request(
-    `/zkpp/${contract}/auth_hash?b=${encodeURIComponent(hash(r))}`
-  ).then((r) => r.json())
+    `/zkpp/${encodeURIComponent(identityContractID)}/auth_hash` +
+    `?b=${encodeURIComponent(hash(nonce))}`
+  ).then((response) => response.json())
 
-  const [c, hc] = computeCAndHc(r, s, await hashPassword(password, authSalt))
-  const query = new URLSearchParams({ r, s, sig, hc: toBase64url(hc) })
+  const [c, hc] = computeCAndHc(nonce, s, await hashPassword(password, authSalt))
+  return { r: nonce, s, sig, c, hc: toBase64url(hc) }
+}
+
+// The other half of signup: get the same salt back for an existing account.
+// The second element is the CID anchoring previously rotated keys, which only
+// matters once an app supports password changes.
+async function retrieveSalt (identityContractID, password) {
+  const contract = encodeURIComponent(identityContractID)
+  const { c, ...proof } = await provePassword(identityContractID, password)
+  const query = new URLSearchParams(proof)
   const encryptedSalt = await request(`/zkpp/${contract}/contract_hash?${query}`)
     .then((r) => r.text())
 
@@ -313,8 +321,7 @@ export async function restoreSession () {
 
   await retainOrSync(identityContractID)
   sbp('chelonia/kv/refreshFilters')
-  await loadLists(identityContractID)
-  await loadOfflineQueue((contractID) => currentLists().includes(contractID))
+  await openLists(identityContractID)
   return identityContractID
 }
 
@@ -323,6 +330,12 @@ async function enterSession (identityContractID) {
   // The slot's `match` reads loggedIn, which Chelonia cannot watch.
   sbp('chelonia/kv/refreshFilters')
   await sbp('chelonia/contract/wait', [identityContractID])
+  await openLists(identityContractID)
+}
+
+// Queued writes for a list this account is not in belong to whoever used this
+// browser before, so the lists have to be known first.
+async function openLists (identityContractID) {
   await loadLists(identityContractID)
   await loadOfflineQueue((contractID) => currentLists().includes(contractID))
 }
@@ -332,9 +345,6 @@ function currentIdentity () {
   if (!identityContractID) throw new AuthError('Not logged in.')
   return identityContractID
 }
-
-const keyIdByName = (contractState, name) =>
-  sbp('chelonia/contract/currentKeyIdByName', contractState, name)
 
 export async function changePassword ({ oldPassword, newPassword }) {
   const identityContractID = currentIdentity()
@@ -346,17 +356,12 @@ export async function changePassword ({ oldPassword, newPassword }) {
   // lets the next message swap the salts on the server.
   let oldContractSalt, newContractSalt, updateToken
   try {
-    const r = randomNonce()
-    const { authSalt, s, sig } = await request(
-      `/zkpp/${contract}/auth_hash?b=${encodeURIComponent(hash(r))}`
-    ).then((r) => r.json())
-    const [c, hc] = computeCAndHc(r, s, await hashPassword(oldPassword, authSalt))
+    const { c, ...proof } = await provePassword(identityContractID, oldPassword)
     const [salt, Ea] = await buildUpdateSaltRequestEc(newPassword, c)
     newContractSalt = salt
     const encrypted = await request(
-      `/zkpp/${contract}/updatePasswordHash`,
-      form({ r, s, sig, hc: toBase64url(hc), Ea })
-    ).then((r) => r.json())
+      `/zkpp/${contract}/updatePasswordHash`, form({ ...proof, Ea })
+    ).then((response) => response.json())
     ;[oldContractSalt, updateToken] = JSON.parse(decryptContractSalt(c, encrypted))
   } catch (e) {
     if (e instanceof AuthError && e.exact) throw e

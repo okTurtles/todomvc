@@ -11,7 +11,7 @@ const busy = ref(false)
 const message = ref('')
 const error = ref('')
 
-async function run (task, done) {
+async function run (task, done = '') {
   error.value = ''
   message.value = ''
   busy.value = true
@@ -20,7 +20,7 @@ async function run (task, done) {
     message.value = done
   } catch (e) {
     error.value = e instanceof AuthError ? e.message : 'Something went wrong. Check the console.'
-    console.error('[todomvc] account change failed', e)
+    console.error('[todomvc] account action failed', e)
   } finally {
     busy.value = false
   }
@@ -33,7 +33,10 @@ const submitPassword = () => run(async () => {
 }, 'Password changed. Use the new one from the next login on.')
 
 // After this the session is gone, so App shows the login form.
-const submitDelete = () => run(() => deleteAccount({ password: deletePassword.value }), '')
+const submitDelete = () => run(async () => {
+  await deleteAccount({ password: deletePassword.value })
+  deletePassword.value = ''
+})
 </script>
 
 <template>

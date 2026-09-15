@@ -21,7 +21,7 @@ const NO_TODOS = Object.freeze({})
 
 // Reducers by name, because a queued write is stored as JSON and cannot carry
 // a function.
-const OPS = { addTodo, setCompleted, setTitle, removeTodo, setAllCompleted, removeCompleted }
+const REDUCERS = { addTodo, setCompleted, setTitle, removeTodo, setAllCompleted, removeCompleted }
 
 // One declaration covers the first fetch, the pubsub subscription, the local
 // mirror, schema validation and the conflict retries.
@@ -45,11 +45,17 @@ export function defineTodosSlot () {
   })
 
   sbp('sbp/selectors/register', {
-    'todomvc/todos/write': (contractID, op, ...args) => sbp('chelonia/kv/update', {
-      contractID,
-      key: TODOS_KEY,
-      updater: OPS[op](...args)
-    })
+    'todomvc/todos/write': (contractID, op, ...args) => {
+      // A queued write comes back from JSON, so the name is only as good as
+      // what was stored. Throwing something other than a TypeError keeps this
+      // out of the offline queue.
+      if (!REDUCERS[op]) throw new Error(`Unknown todo write: ${op}`)
+      return sbp('chelonia/kv/update', {
+        contractID,
+        key: TODOS_KEY,
+        updater: REDUCERS[op](...args)
+      })
+    }
   })
 
   // A value that fails the schema never reaches the app: the mirror keeps the
@@ -74,7 +80,11 @@ export function currentTodos (contractID) {
   return pendingWrites()
     .filter((w) => w.contractID === contractID)
     .reduce((todos, w) => {
-      const next = OPS[w.op](...w.args)(todos)
+      // Skipped rather than thrown: this runs inside a computed, and one bad
+      // entry read back from storage would take the whole list down.
+      const reducer = REDUCERS[w.op]
+      if (!reducer) return todos
+      const next = reducer(...w.args)(todos)
       return next === KV_NOOP ? todos : next
     }, saved)
 }

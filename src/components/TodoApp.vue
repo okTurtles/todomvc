@@ -12,6 +12,7 @@ import {
   todosStatus
 } from '../chelonia/todos.js'
 import { connection } from '../chelonia/connection.js'
+import { rejectedWrite } from '../chelonia/offline.js'
 import { MAX_TITLE_LENGTH, sortedTodos } from '../chelonia/todos-model.js'
 
 const props = defineProps({
@@ -46,6 +47,8 @@ const stale = computed(() => todosStatus(props.listId) === 'error')
 const offline = computed(() => !connection.online)
 // Writes queued for the server, shown on top of the list until they land.
 const waiting = computed(() => pendingCount(props.listId))
+// A queued write the server refused. It is gone from the list by now.
+const refused = computed(() => rejectedWrite())
 
 function readFilter () {
   const name = window.location.hash.replace(/^#\/?/, '')
@@ -120,6 +123,7 @@ function finishEditing () {
       Sending {{ waiting }} {{ waiting === 1 ? 'change' : 'changes' }}&hellip;
     </p>
     <p v-if="error" class="todo-error">{{ error }}</p>
+    <p v-else-if="refused" class="todo-error">{{ refused }}</p>
     <p v-else-if="stale" class="todo-error">
       The server sent a todo list this app cannot read, so this is the last
       version it could.

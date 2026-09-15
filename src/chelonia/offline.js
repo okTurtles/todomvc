@@ -7,8 +7,8 @@
 
 import sbp from '@sbp/sbp'
 import {
-  PERSISTENT_ACTION_SUCCESS,
-  PERSISTENT_ACTION_TOTAL_FAILURE
+  PERSISTENT_ACTION_FAILURE,
+  PERSISTENT_ACTION_SUCCESS
 } from '@chelonia/lib/events'
 import { state } from './state.js'
 
@@ -16,8 +16,10 @@ const QUEUE_KEY = 'todomvc/pending-writes'
 const NO_WRITES = Object.freeze([])
 
 export const pendingWrites = () => state.pendingWrites ?? NO_WRITES
+export const rejectedWrite = () => state.rejectedWrite ?? ''
 
 export function setupOfflineQueue () {
+  ensureRandomUUID()
   keepQueueInLocalStorage()
   sbp('chelonia.persistentActions/configure', {
     databaseKey: QUEUE_KEY,
@@ -27,11 +29,34 @@ export function setupOfflineQueue () {
     state.pendingWrites = pendingWrites().filter((w) => w.id !== id)
   }
   sbp('okTurtles.events/on', PERSISTENT_ACTION_SUCCESS, forget)
-  sbp('okTurtles.events/on', PERSISTENT_ACTION_TOTAL_FAILURE, ({ id, error }) => {
-    console.error('[todomvc] gave up on a queued write', error)
+  sbp('okTurtles.events/on', PERSISTENT_ACTION_FAILURE, ({ id, error }) => {
+    // fetch rejects with a TypeError when the server never answered, which is
+    // what the queue is for. Anything else means it answered and will not take
+    // this write, so retrying forever would only hide it.
+    if (error instanceof TypeError) return
+    console.error('[todomvc] the server refused a queued write', error)
+    state.rejectedWrite = 'A change made offline was refused by the server.'
+    sbp('chelonia.persistentActions/cancel', id)
     forget({ id })
   })
 }
+
+// TODO: BEGIN REMOVEME (okTurtles/libcheloniajs#100)
+// PersistentAction ids come from crypto.randomUUID, which browsers only
+// provide on https and localhost, so the first queued write throws when the
+// demo is opened over the LAN. The lib's files.ts already has this fallback.
+function ensureRandomUUID () {
+  if (typeof crypto.randomUUID === 'function') return
+  crypto.randomUUID = () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(16))
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)]
+      .join('-')
+  }
+}
+// TODO: END REMOVEME (okTurtles/libcheloniajs#100)
 
 // chelonia.db is an in-memory map in this app, and the queue has to outlive a
 // reload, so this one key goes to localStorage instead.
@@ -50,17 +75,20 @@ function keepQueueInLocalStorage () {
 
 // Called once a session is open. Writes for lists this account is not in
 // (another account used this browser and never logged out) are dropped.
+// The overlay is rebuilt from the queue rather than from the saved state, so
+// what is shown cannot drift from what will actually be sent.
 export async function loadOfflineQueue (isOurs) {
   await sbp('chelonia.persistentActions/load')
-  const queued = sbp('chelonia.persistentActions/status')
-  for (const action of queued) {
+  for (const action of sbp('chelonia.persistentActions/status')) {
     if (!isOurs(action.invocation[1])) await sbp('chelonia.persistentActions/cancel', action.id)
   }
-  const kept = new Set(sbp('chelonia.persistentActions/status').map((a) => a.id))
-  state.pendingWrites = pendingWrites().filter((w) => kept.has(w.id))
+  state.pendingWrites = sbp('chelonia.persistentActions/status').map(
+    ({ id, invocation: [, contractID, op, ...args] }) => ({ id, contractID, op, args })
+  )
 }
 
 export function queueWrite (invocation, write) {
+  delete state.rejectedWrite
   const [id] = sbp('chelonia.persistentActions/enqueue', invocation)
   state.pendingWrites = [...pendingWrites(), { id, ...write }]
 }
@@ -72,4 +100,5 @@ export async function dropPendingWrites () {
     await sbp('chelonia.persistentActions/cancel', id)
   }
   state.pendingWrites = []
+  delete state.rejectedWrite
 }

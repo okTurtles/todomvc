@@ -250,6 +250,12 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   color: var(--muted);
 }
 
+.list-note {
+  margin: 10px 0 0;
+  background: var(--surface);
+  color: var(--muted);
+}
+
 .list-error {
   margin: 10px 0 0;
   background: var(--surface);

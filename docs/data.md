@@ -58,4 +58,17 @@ runs. The queue lives under one localStorage key, so it survives a reload, and
 
 Until a write lands, `currentTodos` applies it on top of the mirror value, so
 the list looks the same offline as it will once the server has it. A write that
-lands is removed from that overlay on `PERSISTENT_ACTION_SUCCESS`.
+lands is removed from that overlay on `PERSISTENT_ACTION_SUCCESS`. One the
+server refuses is dropped instead, with a message on the list: a definitive
+answer will not change on a retry, and only a request that got no answer is
+worth sending again.
+
+Two things worth knowing about the queue:
+
+- It is per browser, not per tab. A second window of the same account shows a
+  queued write only once it has landed, though both windows end up the same.
+- Logging out drops whatever is still queued, since the keys go with it. The
+  app asks first.
+
+Only todos are queued. Creating, renaming and sharing a list all need the
+server in the moment, so those controls stay disabled until it is back.

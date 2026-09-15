@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { currentUsername, logout, state } from '../chelonia/index.js'
+import { currentUsername, logout, pendingWrites, state } from '../chelonia/index.js'
 import { currentLists, listIsPending, readInvite } from '../chelonia/lists.js'
 import AccountPanel from './AccountPanel.vue'
 import AuthView from './AuthView.vue'
@@ -22,6 +22,9 @@ const showAccount = ref(false)
 // A list that was just joined has no keys yet, so nothing about it can be read.
 const pending = computed(() => !!selectedListId.value && listIsPending(selectedListId.value))
 
+// The panel must not still be open for whoever logs in next.
+watch(loggedIn, (open) => { if (!open) showAccount.value = false })
+
 // Lists arrive after login and can arrive later still, when another tab adds
 // one or an invite is answered.
 watch(lists, (contractIDs) => {
@@ -42,6 +45,11 @@ onMounted(() => window.addEventListener('hashchange', onHashChange))
 onUnmounted(() => window.removeEventListener('hashchange', onHashChange))
 
 async function onLogout () {
+  // Logging out drops this account's keys, so a queued write can never be sent.
+  const waiting = pendingWrites().length
+  if (waiting && !window.confirm(
+    `${waiting} change${waiting === 1 ? '' : 's'} made offline will be lost. Log out anyway?`
+  )) return
   try {
     await logout()
   } catch (e) {

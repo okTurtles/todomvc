@@ -19,5 +19,6 @@ export async function startChelonia () {
 export {
   AuthError, changePassword, currentUsername, deleteAccount, login, logout, signup
 } from './auth.js'
+export { pendingWrites } from './offline.js'
 export { connection } from './connection.js'
 export { state } from './state.js'

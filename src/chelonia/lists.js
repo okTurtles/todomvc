@@ -95,7 +95,7 @@ function requireIdentity () {
   return identityContractID
 }
 
-const keyIdByName = (contractIDOrState, name) =>
+export const keyIdByName = (contractIDOrState, name) =>
   sbp('chelonia/contract/currentKeyIdByName', contractIDOrState, name)
 
 export async function createList (title) {

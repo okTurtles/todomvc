@@ -85,6 +85,11 @@ Each one is fenced in the source with `TODO: BEGIN REMOVEME (issue)` and
   [libcheloniajs#94](https://github.com/okTurtles/libcheloniajs/issues/94).
 - `src/chelonia/auth.js`, `USERNAME_REGEX`: a copy of chel's private
   `NAME_REGEX`. Goes once chel exports the rule.
+- `src/chelonia/offline.js`, `ensureRandomUUID`: `@chelonia/lib` builds
+  persistent action ids with `crypto.randomUUID`, which browsers only provide
+  on https and localhost, so the demo breaks over the LAN. Its `files.ts`
+  already falls back; `persistent-actions.ts` does not.
+  [libcheloniajs#100](https://github.com/okTurtles/libcheloniajs/issues/100).
 - `src/chelonia/auth.js`, the key list in `signup`: gets shorter once
   [libcheloniajs#91](https://github.com/okTurtles/libcheloniajs/issues/91)
   lands. Not a removal, so it is a plain TODO.
