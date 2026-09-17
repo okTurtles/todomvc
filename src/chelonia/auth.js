@@ -1,9 +1,10 @@
 // Signup, login, logout and session restore.
 //
 // IPK and IEK are derived from the password and never stored. CSK, CEK and SAK
-// are random, and their secret halves sit in the contract encrypted to the IEK.
-// That is what makes login work on a machine that has never seen the account:
-// deriving the IEK is enough for Chelonia to open them while it syncs.
+// are random, and their secret halves sit inside the contract, each encrypted
+// with the IEK. That is what makes login work on a machine that has never seen
+// the account: deriving the IEK again is enough for Chelonia to open them while
+// it syncs.
 
 import sbp from '@sbp/sbp'
 import { Secret } from '@chelonia/lib/Secret'
@@ -114,9 +115,10 @@ async function registerSalt (username, password) {
   return [contractSalt, decryptContractSalt(encryptionKey, encryptedToken)]
 }
 
-// Prove a password against `/zkpp/:contractID/auth_hash`. Login, changing the
-// password and deleting the account all start here; `c` is the shared secret
-// the answer comes back encrypted to.
+// Shows the server we know the password, without sending it. Login, changing
+// the password and deleting the account all begin with this. `c` is the value
+// both sides end up with, and the server encrypts its answer with a key
+// derived from it, so only someone who finished this exchange can read it.
 async function provePassword (identityContractID, password) {
   const nonce = randomNonce()
   const { authSalt, s, sig } = await request(
@@ -160,14 +162,15 @@ export async function signup ({ username, password }) {
   // Re-derivable at login, so never stored.
   const IPK = await deriveKeyFromPassword(EDWARDS25519SHA512BATCH, password, contractSalt)
   const IEK = await deriveKeyFromPassword(CURVE25519XSALSA20POLY1305, password, contractSalt)
-  // Slot writes are signed with the CSK and encrypted to the CEK. The SAK signs
-  // the Shelter authorization header; without it every /kv request fails.
+  // Slot writes are signed with the CSK and encrypted with the CEK. The SAK
+  // signs the Shelter authorization header; without it every /kv request
+  // fails.
   const CSK = keygen(EDWARDS25519SHA512BATCH)
   const CEK = keygen(CURVE25519XSALSA20POLY1305)
   const SAK = keygen(EDWARDS25519SHA512BATCH)
   // Lets the account delete itself later. The server keeps only the hash, and
-  // the token sits in the contract encrypted to the IEK, so deleting takes the
-  // password.
+  // the token itself sits in the contract encrypted with the IEK, so deleting
+  // takes the password.
   const deletionToken = generateSalt()
 
   // Transient, so neither of the password-derived keys reaches the saved state.
@@ -351,9 +354,10 @@ export async function changePassword ({ oldPassword, newPassword }) {
   const identityState = state[identityContractID]
   const contract = encodeURIComponent(identityContractID)
 
-  // Same proof as login. The new password travels encrypted to that proof's
-  // shared secret, and the answer is the old salt plus a one-time token that
-  // lets the next message swap the salts on the server.
+  // Starts with the same exchange as login. The new password's hash travels
+  // encrypted with a key derived from that exchange, and the answer is the old
+  // contract salt plus a one-time token, which is what lets the next message
+  // swap the salts on the server.
   let oldContractSalt, newContractSalt, updateToken
   try {
     const { c, ...proof } = await provePassword(identityContractID, oldPassword)
@@ -384,10 +388,11 @@ export async function changePassword ({ oldPassword, newPassword }) {
     [oldIPK, oldIEK, IPK, IEK].map((key) => ({ key, transient: true }))
   ))
   try {
-    // Only the two password keys are replaced. The everyday keys stay and get
-    // their secrets encrypted again to the new IEK, so nothing already on the
-    // contract has to be rewritten. The same id and public key go back in,
-    // since Chelonia checks the decrypted secret against the entry's id.
+    // Only the two password-derived keys, IPK and IEK, are replaced. CSK, CEK
+    // and SAK keep the same keys and only have their stored secrets
+    // re-encrypted with the new IEK, so nothing already written to the
+    // contract has to change. Each entry goes back in with its own id and
+    // public half, because Chelonia matches the decrypted secret to the id.
     const keep = (name) => {
       const id = keyIdByName(identityState, name)
       return {

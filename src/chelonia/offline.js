@@ -44,7 +44,8 @@ export function setupOfflineQueue () {
 // TODO: BEGIN REMOVEME (okTurtles/libcheloniajs#100)
 // PersistentAction ids come from crypto.randomUUID, which browsers only
 // provide on https and localhost, so the first queued write throws when the
-// demo is opened over the LAN. The lib's files.ts already has this fallback.
+// demo is opened over the LAN. The lib does this itself now, so this goes with
+// the next release.
 function ensureRandomUUID () {
   if (typeof crypto.randomUUID === 'function') return
   crypto.randomUUID = () => {

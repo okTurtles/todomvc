@@ -38,7 +38,7 @@ sbp('chelonia/defineContract', {
         state.attributes = { ...data.attributes }
       }
     },
-    // The token is encrypted to the key the password derives, so a password
+    // The token is encrypted with a password-derived key, so a password
     // change publishes it again under the new one.
     'gi.contracts/identity/setDeletionToken': {
       validate (data) {

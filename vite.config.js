@@ -22,10 +22,12 @@ export default defineConfig(({ mode }) => ({
     // object avoids having to track which flags it reads.
     'process.env': JSON.stringify({
       NODE_ENV: mode === 'production' ? 'production' : 'development',
-      // A browser keeps no copy of the message log, so Chelonia takes each
-      // contract's HEAD from the saved state instead of a local database.
-      // Without this the log is an empty map after a reload, and the first
-      // new event on a contract fails with "No latest HEAD".
+      // Without this, Chelonia keeps its own copy of every contract's message
+      // log in `chelonia.db`, which this app leaves as the default in-memory
+      // map. The saved state survives a reload but that map does not, so the
+      // first action after a reload fails with "No latest HEAD". An app that
+      // wants the full mode has to give Chelonia a `chelonia.db` backed by
+      // something durable, like IndexedDB.
       LIGHTWEIGHT_CLIENT: 'true'
     })
   }

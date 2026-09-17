@@ -57,18 +57,19 @@ runs. The queue lives under one localStorage key, so it survives a reload, and
 `retryAll` is called as soon as the socket is back.
 
 Until a write lands, `currentTodos` applies it on top of the mirror value, so
-the list looks the same offline as it will once the server has it. A write that
-lands is removed from that overlay on `PERSISTENT_ACTION_SUCCESS`. One the
-server refuses is dropped instead, with a message on the list: a definitive
-answer will not change on a retry, and only a request that got no answer is
-worth sending again.
+the list looks the same offline as it will once the server has it. When a write
+succeeds it is taken off that overlay, on `PERSISTENT_ACTION_SUCCESS`. When the
+server refuses a write it is dropped and the list says so, because retrying
+would only get the same refusal.
 
 Two things worth knowing about the queue:
 
-- It is per browser, not per tab. A second window of the same account shows a
-  queued write only once it has landed, though both windows end up the same.
-- Logging out drops whatever is still queued, since the keys go with it. The
-  app asks first.
+- The queue belongs to the browser, not to a window, so every window of the
+  same account shares it.
+- Logging out cancels every queued write, and they are never sent. It has to:
+  the keys that would sign them are discarded with the session. The app warns
+  you and asks whether to log out anyway.
 
-Only todos are queued. Creating, renaming and sharing a list all need the
-server in the moment, so those controls stay disabled until it is back.
+Only individual todo items use the offline queue. Operations on a whole list,
+creating one, renaming it, or sharing it, all need the server to be online, so
+those controls stay disabled until a connection is back.
