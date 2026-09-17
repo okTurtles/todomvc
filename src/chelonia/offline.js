@@ -23,7 +23,10 @@ export function setupOfflineQueue () {
   keepQueueInLocalStorage()
   sbp('chelonia.persistentActions/configure', {
     databaseKey: QUEUE_KEY,
-    options: { retrySeconds: 15 }
+    // maxAttempts has to be a real number rather than Infinity. The queue is
+    // stored as JSON, where Infinity turns into null, and an action read back
+    // with a null limit is thrown away the first time it fails.
+    options: { retrySeconds: 15, maxAttempts: Number.MAX_SAFE_INTEGER }
   })
   const forget = ({ id }) => {
     state.pendingWrites = pendingWrites().filter((w) => w.id !== id)
