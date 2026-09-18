@@ -70,6 +70,12 @@ Two things worth knowing about the queue:
   the keys that would sign them are discarded with the session. The app warns
   you and asks whether to log out anyway.
 
+One thing still does not work. A todo made while the server is unreachable
+cannot be ticked off, renamed or deleted until it has landed: the change is
+applied to the value the server has, which does not have that todo in it yet,
+so it comes out as doing nothing and is dropped without a word.
+`test/e2e/offline.spec.mjs` has the case, marked as a known gap.
+
 Only individual todo items use the offline queue. Operations on a whole list,
 creating one, renaming it, or sharing it, all need the server to be online, so
 those controls stay disabled until a connection is back.

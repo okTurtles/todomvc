@@ -44,3 +44,32 @@ export async function inviteLink (page) {
   await expect(link).toBeVisible()
   return link.inputValue()
 }
+
+// The account panel, opened from the footer.
+export async function openAccount (page) {
+  await page.getByRole('button', { name: 'account', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Change password' })).toBeVisible()
+}
+
+// Both forms in the panel have a field labelled 'Password', so each one is
+// reached through its own form.
+const accountForm = (page, heading) =>
+  page.locator('form.auth', { has: page.getByRole('heading', { name: heading }) })
+
+export async function changePassword (page, oldPassword, newPassword) {
+  const form = accountForm(page, 'Change password')
+  await form.getByLabel('Current password').fill(oldPassword)
+  await form.getByLabel('New password').fill(newPassword)
+  await form.getByRole('button', { name: 'Change password' }).click()
+}
+
+export async function deleteAccount (page, password) {
+  const form = accountForm(page, 'Delete account')
+  await form.getByLabel('Password').fill(password)
+  await form.getByRole('button', { name: 'Delete my account' }).click()
+}
+
+// The panel's forms also use .auth, so the login view is told apart by its own
+// button. Use this instead of .auth wherever the panel may have been open.
+export const loginForm = (page) =>
+  page.locator('form.auth', { has: page.getByRole('button', { name: 'Log in' }) })

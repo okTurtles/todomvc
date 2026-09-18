@@ -107,27 +107,6 @@ test('a username the server would reject is caught before any request', async ({
   expect(requested).toBe(false)
 })
 
-test('a change made while the server is unreachable is sent once it is back', async ({ page, context }) => {
-  await signup(page)
-  await addTodo(page, 'written while connected')
-
-  await context.setOffline(true)
-  await expect(page.locator('.todo-notice')).toContainText('Not connected')
-
-  // Still editable. The change shows at once and waits in the queue.
-  await addTodo(page, 'written while offline')
-  await expect(titles(page)).toHaveText(['written while connected', 'written while offline'])
-  await expect(page.locator('.todo-notice')).toContainText('1 waiting')
-
-  await context.setOffline(false)
-  await expect(page.locator('.todo-notice')).toBeHidden()
-  await expect(page.locator('.todo-status')).toBeHidden()
-
-  // Nothing is queued any more, so this is what the server has.
-  await page.reload()
-  await expect(titles(page)).toHaveText(['written while connected', 'written while offline'])
-})
-
 test('two browsers on the same account converge', async ({ browser }) => {
   const one = await browser.newContext()
   const two = await browser.newContext()
