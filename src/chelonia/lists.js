@@ -95,7 +95,7 @@ function requireIdentity () {
   return identityContractID
 }
 
-const keyIdByName = (contractIDOrState, name) =>
+export const keyIdByName = (contractIDOrState, name) =>
   sbp('chelonia/contract/currentKeyIdByName', contractIDOrState, name)
 
 export async function createList (title) {
@@ -108,8 +108,8 @@ export async function createList (title) {
   // registerContract signs OP_CONTRACT with a key Chelonia already holds.
   sbp('chelonia/storeSecretKeys', new Secret([{ key: CSK }, { key: CEK }, { key: SAK }]))
 
-  // Everything is encrypted to the list's own CEK, so handing over the CEK
-  // hands over the rest.
+  // Every secret here is encrypted with the list's own CEK, so handing over
+  // the CEK hands over the rest.
   const secret = (key) => encryptedOutgoingDataWithRawKey(CEK, serializeKey(key, true))
 
   const message = await sbp('chelonia/out/registerContract', {
@@ -270,8 +270,8 @@ export async function acceptInvite ({ contractID, secret }) {
   // Transient: it signs one message and is not ours to keep.
   sbp('chelonia/storeSecretKeys', new Secret([{ key: inviteKey, transient: true }]))
   try {
-    // Syncs the list too, which is where the public key the request is
-    // encrypted to comes from.
+    // Syncs the list too, which is where the public key used to encrypt the
+    // request comes from.
     await sbp('chelonia/contract/retain', [contractID])
 
     const identityState = state[identityContractID]

@@ -46,3 +46,35 @@ declared slot at `rootState._kv[contractID][key]` and updates it from four
 places: the first load, a push from another client, our own write, and a
 refetch after the socket reconnects. That state object is a Vue `reactive()`,
 so a `computed` over it reruns on all four and the list redraws by itself.
+
+## Offline
+
+`chelonia/kv/update` needs the server, so while the socket is down a write goes
+into Chelonia's persistent action queue instead (`src/chelonia/offline.js`).
+The queue stores `[selector, ...args]` as JSON, which is why writes are named
+(`'addTodo'`, `'setTitle'`, ...) and the reducer is looked up when the write
+runs. The queue lives under one localStorage key, so it survives a reload, and
+`retryAll` is called as soon as the socket is back.
+
+Until a write lands, `currentTodos` applies it on top of the mirror value, so
+the list looks the same offline as it will once the server has it. When a write
+succeeds it is taken off that overlay, on `PERSISTENT_ACTION_SUCCESS`. When the
+server refuses a write it is dropped and the list says so, because retrying
+would only get the same refusal.
+
+One case does not hold. A todo made while the server is away cannot be ticked
+off, renamed or deleted until it has landed: the change is applied to the value
+the server has, which does not have that todo in it, so it does nothing and is
+lost. `test/e2e/offline.spec.mjs` has it, marked as a known gap.
+
+Two things worth knowing about the queue:
+
+- The queue belongs to the browser, not to a window, so every window of the
+  same account shares it.
+- Logging out cancels every queued write, and they are never sent. It has to:
+  the keys that would sign them are discarded with the session. The app warns
+  you and asks whether to log out anyway.
+
+Only individual todo items use the offline queue. Operations on a whole list,
+creating one, renaming it, or sharing it, all need the server to be online, so
+those controls stay disabled until a connection is back.

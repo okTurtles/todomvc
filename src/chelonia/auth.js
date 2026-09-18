@@ -1,18 +1,20 @@
 // Signup, login, logout and session restore.
 //
 // IPK and IEK are derived from the password and never stored. CSK, CEK and SAK
-// are random, and their secret halves sit in the contract encrypted to the IEK.
-// That is what makes login work on a machine that has never seen the account:
-// deriving the IEK is enough for Chelonia to open them while it syncs.
+// are random, and their secret halves sit inside the contract, each encrypted
+// with the IEK. That is what makes login work on a machine that has never seen
+// the account: deriving the IEK again is enough for Chelonia to open them while
+// it syncs.
 
 import sbp from '@sbp/sbp'
 import { Secret } from '@chelonia/lib/Secret'
-import { encryptedOutgoingDataWithRawKey } from '@chelonia/lib/encryptedData'
-import { bytesToB64 } from '@chelonia/lib/functions'
+import { encryptedIncomingData, encryptedOutgoingDataWithRawKey } from '@chelonia/lib/encryptedData'
+import { blake32Hash, bytesToB64 } from '@chelonia/lib/functions'
 import {
   base64ToBase64url,
   boxKeyPair,
   buildRegisterSaltRequest,
+  buildUpdateSaltRequestEc,
   computeCAndHc,
   decryptContractSalt,
   hash,
@@ -23,12 +25,14 @@ import {
   CURVE25519XSALSA20POLY1305,
   EDWARDS25519SHA512BATCH,
   deriveKeyFromPassword,
+  generateSalt,
   keyId,
   keygen,
   serializeKey
 } from '@chelonia/crypto'
 import { API_URL, CONTRACT_NAME } from './config.js'
-import { createList, loadLists, retainOrSync } from './lists.js'
+import { createList, currentLists, keyIdByName, loadLists, retainOrSync } from './lists.js'
+import { dropPendingWrites, loadOfflineQueue } from './offline.js'
 import { clearSavedState, persistState, state } from './state.js'
 
 const DEFAULT_LIST_TITLE = 'My todos'
@@ -111,19 +115,28 @@ async function registerSalt (username, password) {
   return [contractSalt, decryptContractSalt(encryptionKey, encryptedToken)]
 }
 
-// The other half: prove the password for an existing account and get the same
-// salt back. The second element is the CID anchoring previously rotated keys,
-// which only matters once an app supports password changes.
-async function retrieveSalt (identityContractID, password) {
-  const r = randomNonce()
-  const contract = encodeURIComponent(identityContractID)
-
+// Shows the server we know the password, without sending it. Login, changing
+// the password and deleting the account all begin with this. `c` is the value
+// both sides end up with, and the server encrypts its answer with a key
+// derived from it, so only someone who finished this exchange can read it.
+async function provePassword (identityContractID, password) {
+  const nonce = randomNonce()
   const { authSalt, s, sig } = await request(
-    `/zkpp/${contract}/auth_hash?b=${encodeURIComponent(hash(r))}`
-  ).then((r) => r.json())
+    `/zkpp/${encodeURIComponent(identityContractID)}/auth_hash` +
+    `?b=${encodeURIComponent(hash(nonce))}`
+  ).then((response) => response.json())
 
-  const [c, hc] = computeCAndHc(r, s, await hashPassword(password, authSalt))
-  const query = new URLSearchParams({ r, s, sig, hc: toBase64url(hc) })
+  const [c, hc] = computeCAndHc(nonce, s, await hashPassword(password, authSalt))
+  return { r: nonce, s, sig, c, hc: toBase64url(hc) }
+}
+
+// The other half of signup: get the same salt back for an existing account.
+// The second element is the CID anchoring previously rotated keys, which only
+// matters once an app supports password changes.
+async function retrieveSalt (identityContractID, password) {
+  const contract = encodeURIComponent(identityContractID)
+  const { c, ...proof } = await provePassword(identityContractID, password)
+  const query = new URLSearchParams(proof)
   const encryptedSalt = await request(`/zkpp/${contract}/contract_hash?${query}`)
     .then((r) => r.text())
 
@@ -149,11 +162,16 @@ export async function signup ({ username, password }) {
   // Re-derivable at login, so never stored.
   const IPK = await deriveKeyFromPassword(EDWARDS25519SHA512BATCH, password, contractSalt)
   const IEK = await deriveKeyFromPassword(CURVE25519XSALSA20POLY1305, password, contractSalt)
-  // Slot writes are signed with the CSK and encrypted to the CEK. The SAK signs
-  // the Shelter authorization header; without it every /kv request fails.
+  // Slot writes are signed with the CSK and encrypted with the CEK. The SAK
+  // signs the Shelter authorization header; without it every /kv request
+  // fails.
   const CSK = keygen(EDWARDS25519SHA512BATCH)
   const CEK = keygen(CURVE25519XSALSA20POLY1305)
   const SAK = keygen(EDWARDS25519SHA512BATCH)
+  // Lets the account delete itself later. The server keeps only the hash, and
+  // the token itself sits in the contract encrypted with the IEK, so deleting
+  // takes the password.
+  const deletionToken = generateSalt()
 
   // Transient, so neither of the password-derived keys reaches the saved state.
   sbp('chelonia/storeSecretKeys', new Secret([
@@ -170,7 +188,8 @@ export async function signup ({ username, password }) {
         // this first message.
         headers: {
           'shelter-namespace-registration': username,
-          'shelter-salt-registration-token': saltRegistrationToken
+          'shelter-salt-registration-token': saltRegistrationToken,
+          'shelter-deletion-token-digest': blake32Hash(deletionToken)
         }
       },
       signingKeyId: keyId(IPK),
@@ -231,7 +250,13 @@ export async function signup ({ username, password }) {
           data: serializeKey(SAK, false)
         }
       ],
-      data: { attributes: { username } }
+      data: {
+        attributes: {
+          username,
+          encryptedDeletionToken: encryptedOutgoingDataWithRawKey(IEK, deletionToken)
+            .serialize('encryptedDeletionToken')
+        }
+      }
     })
   } catch (e) {
     // TODO: BEGIN REMOVEME (okTurtles/libcheloniajs#94)
@@ -279,6 +304,12 @@ export async function login ({ username, password }) {
     // Syncing is the recovery step: processing OP_CONTRACT decrypts the CSK,
     // CEK and SAK with the IEK and stores them persistently.
     await sbp('chelonia/contract/retain', [identityContractID])
+    // After a password change those three are only readable from the key
+    // update onwards, so the first pass could not open anything before it.
+    // Go through the log once more now that they are known.
+    if (state.contracts[identityContractID]?.missingDecryptionKeyIds?.length) {
+      await sbp('chelonia/contract/sync', [identityContractID], { resync: true })
+    }
   } finally {
     sbp('chelonia/clearTransientSecretKeys', [keyId(IEK)])
   }
@@ -293,7 +324,7 @@ export async function restoreSession () {
 
   await retainOrSync(identityContractID)
   sbp('chelonia/kv/refreshFilters')
-  await loadLists(identityContractID)
+  await openLists(identityContractID)
   return identityContractID
 }
 
@@ -302,7 +333,150 @@ async function enterSession (identityContractID) {
   // The slot's `match` reads loggedIn, which Chelonia cannot watch.
   sbp('chelonia/kv/refreshFilters')
   await sbp('chelonia/contract/wait', [identityContractID])
+  await openLists(identityContractID)
+}
+
+// Queued writes for a list this account is not in belong to whoever used this
+// browser before, so the lists have to be known first.
+async function openLists (identityContractID) {
   await loadLists(identityContractID)
+  await loadOfflineQueue((contractID) => currentLists().includes(contractID))
+}
+
+function currentIdentity () {
+  const identityContractID = state.loggedIn?.identityContractID
+  if (!identityContractID) throw new AuthError('Not logged in.')
+  return identityContractID
+}
+
+export async function changePassword ({ oldPassword, newPassword }) {
+  const identityContractID = currentIdentity()
+  const identityState = state[identityContractID]
+  const contract = encodeURIComponent(identityContractID)
+
+  // Starts with the same exchange as login. The new password's hash travels
+  // encrypted with a key derived from that exchange, and the answer is the old
+  // contract salt plus a one-time token, which is what lets the next message
+  // swap the salts on the server.
+  let oldContractSalt, newContractSalt, updateToken
+  try {
+    const { c, ...proof } = await provePassword(identityContractID, oldPassword)
+    const [salt, Ea] = await buildUpdateSaltRequestEc(newPassword, c)
+    newContractSalt = salt
+    const encrypted = await request(
+      `/zkpp/${contract}/updatePasswordHash`, form({ ...proof, Ea })
+    ).then((response) => response.json())
+    ;[oldContractSalt, updateToken] = JSON.parse(decryptContractSalt(c, encrypted))
+  } catch (e) {
+    if (e instanceof AuthError && e.exact) throw e
+    throw new AuthError('Incorrect password.', { cause: e })
+  }
+
+  const oldIPK = await deriveKeyFromPassword(EDWARDS25519SHA512BATCH, oldPassword, oldContractSalt)
+  const oldIEK = await deriveKeyFromPassword(CURVE25519XSALSA20POLY1305, oldPassword, oldContractSalt)
+  const IPK = await deriveKeyFromPassword(EDWARDS25519SHA512BATCH, newPassword, newContractSalt)
+  const IEK = await deriveKeyFromPassword(CURVE25519XSALSA20POLY1305, newPassword, newContractSalt)
+
+  // Read while the old IEK is still the current key.
+  const encryptedToken = identityState.attributes?.encryptedDeletionToken
+  const deletionToken = encryptedToken && encryptedIncomingData(
+    identityContractID, identityState, encryptedToken, NaN,
+    { [keyId(oldIEK)]: oldIEK }, 'encryptedDeletionToken'
+  ).valueOf()
+
+  sbp('chelonia/storeSecretKeys', new Secret(
+    [oldIPK, oldIEK, IPK, IEK].map((key) => ({ key, transient: true }))
+  ))
+  try {
+    // Only the two password-derived keys, IPK and IEK, are replaced. CSK, CEK
+    // and SAK keep the same keys and only have their stored secrets
+    // re-encrypted with the new IEK, so nothing already written to the
+    // contract has to change. Each entry goes back in with its own id and
+    // public half, because Chelonia matches the decrypted secret to the id.
+    const keep = (name) => {
+      const id = keyIdByName(identityState, name)
+      return {
+        id,
+        name,
+        oldKeyId: id,
+        data: identityState._vm.authorizedKeys[id].data,
+        meta: { private: { content: encryptedOutgoingDataWithRawKey(IEK, state.secretKeys[id]) } }
+      }
+    }
+    await sbp('chelonia/out/keyUpdate', {
+      contractID: identityContractID,
+      contractName: CONTRACT_NAME,
+      data: [
+        {
+          id: keyId(IPK),
+          name: 'ipk',
+          oldKeyId: keyId(oldIPK),
+          meta: { private: { transient: true } },
+          data: serializeKey(IPK, false)
+        },
+        {
+          id: keyId(IEK),
+          name: 'iek',
+          oldKeyId: keyId(oldIEK),
+          meta: { private: { transient: true } },
+          data: serializeKey(IEK, false)
+        },
+        keep('csk'),
+        keep('cek'),
+        keep('#sak')
+      ],
+      signingKeyId: keyId(oldIPK),
+      // The server swaps the salts while it accepts this message.
+      publishOptions: { headers: { 'shelter-salt-update-token': updateToken } }
+    })
+    if (deletionToken) {
+      await sbp('chelonia/out/actionEncrypted', {
+        action: `${CONTRACT_NAME}/setDeletionToken`,
+        contractID: identityContractID,
+        data: {
+          encryptedDeletionToken: encryptedOutgoingDataWithRawKey(IEK, deletionToken)
+            .serialize('encryptedDeletionToken')
+        },
+        signingKeyId: keyIdByName(identityState, 'csk'),
+        encryptionKeyId: keyIdByName(identityState, 'cek')
+      })
+    }
+    await sbp('chelonia/contract/wait', [identityContractID])
+  } finally {
+    sbp('chelonia/clearTransientSecretKeys', [oldIPK, oldIEK, IPK, IEK].map(keyId))
+  }
+}
+
+export async function deleteAccount ({ password }) {
+  const identityContractID = currentIdentity()
+  const identityState = state[identityContractID]
+  const encryptedToken = identityState?.attributes?.encryptedDeletionToken
+  if (!encryptedToken) {
+    throw new AuthError('This account was made before deleting was possible.')
+  }
+
+  let token
+  try {
+    const contractSalt = await retrieveSalt(identityContractID, password)
+    const IEK = await deriveKeyFromPassword(CURVE25519XSALSA20POLY1305, password, contractSalt)
+    token = encryptedIncomingData(
+      identityContractID, identityState, encryptedToken, NaN,
+      { [keyId(IEK)]: IEK }, 'encryptedDeletionToken'
+    ).valueOf()
+  } catch (e) {
+    if (e instanceof AuthError && e.exact) throw e
+    throw new AuthError('Incorrect password.', { cause: e })
+  }
+
+  // The server takes it from here and also deletes the lists this account
+  // created. Lists it only joined belong to whoever made them.
+  const [result] = await sbp('chelonia/out/deleteContract', identityContractID, {
+    [identityContractID]: { token: new Secret(token) }
+  })
+  if (result.status === 'rejected') {
+    throw new AuthError('Could not delete the account.', { cause: result.reason })
+  }
+  await logout()
 }
 
 // Read from the contract state rather than kept alongside the session, so
@@ -313,6 +487,9 @@ export function currentUsername () {
 }
 
 export async function logout () {
+  // Unsent writes cannot go out without this account's keys.
+  await dropPendingWrites()
+  sbp('chelonia.persistentActions/unload')
   // Stop saving before reset churns through the state, then start again for
   // whoever logs in next.
   clearSavedState()
