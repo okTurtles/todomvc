@@ -62,6 +62,11 @@ succeeds it is taken off that overlay, on `PERSISTENT_ACTION_SUCCESS`. When the
 server refuses a write it is dropped and the list says so, because retrying
 would only get the same refusal.
 
+One case does not hold. A todo made while the server is away cannot be ticked
+off, renamed or deleted until it has landed: the change is applied to the value
+the server has, which does not have that todo in it, so it does nothing and is
+lost. `test/e2e/offline.spec.mjs` has it, marked as a known gap.
+
 Two things worth knowing about the queue:
 
 - The queue belongs to the browser, not to a window, so every window of the
@@ -69,12 +74,6 @@ Two things worth knowing about the queue:
 - Logging out cancels every queued write, and they are never sent. It has to:
   the keys that would sign them are discarded with the session. The app warns
   you and asks whether to log out anyway.
-
-One thing still does not work. A todo made while the server is unreachable
-cannot be ticked off, renamed or deleted until it has landed: the change is
-applied to the value the server has, which does not have that todo in it yet,
-so it comes out as doing nothing and is dropped without a word.
-`test/e2e/offline.spec.mjs` has the case, marked as a known gap.
 
 Only individual todo items use the offline queue. Operations on a whole list,
 creating one, renaming it, or sharing it, all need the server to be online, so
