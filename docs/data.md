@@ -69,8 +69,10 @@ lost. `test/e2e/offline.spec.mjs` has it, marked as a known gap.
 
 Two things worth knowing about the queue:
 
-- The queue belongs to the browser, not to a window, so every window of the
-  same account shares it.
+- The queue is stored once for the whole browser, but each window keeps its
+  own copy and saves all of it at once, so two windows writing offline
+  overwrite each other. A window closed before its writes have been sent
+  loses them.
 - Logging out cancels every queued write, and they are never sent. It has to:
   the keys that would sign them are discarded with the session. The app warns
   you and asks whether to log out anyway.

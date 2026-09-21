@@ -30,7 +30,7 @@ const submitPassword = () => run(async () => {
   await changePassword({ oldPassword: oldPassword.value, newPassword: newPassword.value })
   oldPassword.value = ''
   newPassword.value = ''
-}, 'Password changed. Use the new one from the next login on.')
+}, 'Password changed. Use the new one next time you log in.')
 
 // After this the session is gone, so App shows the login form.
 const submitDelete = () => run(async () => {

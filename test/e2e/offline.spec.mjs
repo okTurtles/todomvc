@@ -126,7 +126,7 @@ test('a queued write survives a reload and is sent when the server is back', asy
 // A write the server answers with an error gets the same answer next time, so
 // it is dropped rather than retried forever.
 test('a queued write the server refuses is dropped and reported', async ({ page, context }) => {
-  await signup(page)
+  const username = await signup(page)
 
   await context.setOffline(true)
   await expect(page.locator('.todo-notice')).toContainText('Not connected')
@@ -143,6 +143,40 @@ test('a queued write the server refuses is dropped and reported', async ({ page,
   await expect(titles(page)).toHaveText([])
   await expect(page.locator('.todo-status')).toBeHidden()
   await expect(page.locator('.todo-notice')).toBeHidden()
+
+  // The notice is about a write that no longer exists, so it must not come
+  // back from the saved state on the next visit.
+  await page.unroute('**/kv/**')
+  await page.reload()
+  // Wait for the session to be back before checking the notice is not, or
+  // this passes against a page that has not finished starting.
+  await expect(page.locator('.session')).toContainText(username)
+  await expect(titles(page)).toHaveText([])
+  await expect(page.locator('.todo-error')).toBeHidden()
+})
+
+// `load` retries every stored write before anything can filter them, so a
+// write left behind by whoever used this browser before is attempted under the
+// new account and fails. That is not this user's business.
+test('a queued write left by another account is dropped without a word', async ({ page, context }) => {
+  await signup(page)
+
+  await context.setOffline(true)
+  await expect(page.locator('.todo-notice')).toContainText('Not connected')
+  await addTodo(page, 'belongs to the account before this one')
+  await expect(page.locator('.todo-notice')).toContainText('1 waiting')
+
+  // Losing the session without logging out is the only way the queue can
+  // outlive the account that filled it.
+  await page.evaluate(() => localStorage.removeItem('todomvc/chelonia-state'))
+  await context.setOffline(false)
+  await page.reload()
+
+  const next = await signup(page)
+  await expect(page.locator('.session')).toContainText(next)
+  await expect(titles(page)).toHaveText([])
+  await expect(page.locator('.todo-error')).toBeHidden()
+  await expect(page.locator('.todo-status')).toBeHidden()
 })
 
 test('logging out with writes still queued warns, and drops them once confirmed', async ({ page, context }) => {

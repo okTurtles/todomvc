@@ -31,21 +31,27 @@ import {
   serializeKey
 } from '@chelonia/crypto'
 import { API_URL, CONTRACT_NAME } from './config.js'
-import { createList, currentLists, keyIdByName, loadLists, retainOrSync } from './lists.js'
+import { AuthError } from './errors.js'
+import {
+  createList, currentLists, keyIdByName, loadLists, requireIdentity, retainOrSync
+} from './lists.js'
 import { dropPendingWrites, loadOfflineQueue } from './offline.js'
 import { clearSavedState, persistState, state } from './state.js'
 
 const DEFAULT_LIST_TITLE = 'My todos'
 
-export class AuthError extends Error {
-  constructor (message, options) {
-    super(message, options)
-    this.name = 'AuthError'
-    // Login turns most failures into "incorrect username or password". This
-    // marks the ones whose message is already the right one.
-    this.exact = !!options?.exact
-  }
-}
+// A failure here is nearly always the password. An AuthError that already says
+// something exact is passed through as it is.
+const wrongPassword = (e) =>
+  e instanceof AuthError && e.exact ? e : new AuthError('Incorrect password.', { cause: e })
+
+// Opens the deletion token kept in the contract. Both password paths need it,
+// and both have to name the same additionalData string.
+const openDeletionToken = (identityContractID, identityState, encryptedToken, IEK) =>
+  encryptedIncomingData(
+    identityContractID, identityState, encryptedToken, NaN,
+    { [keyId(IEK)]: IEK }, 'encryptedDeletionToken'
+  ).valueOf()
 
 // TODO: BEGIN REMOVEME (copy of chel's private NAME_REGEX, until chel exports it)
 // Copied from NAME_REGEX in chel's src/serve/routes.ts. The server rejects
@@ -130,9 +136,8 @@ async function provePassword (identityContractID, password) {
   return { r: nonce, s, sig, c, hc: toBase64url(hc) }
 }
 
-// The other half of signup: get the same salt back for an existing account.
-// The second element is the CID anchoring previously rotated keys, which only
-// matters once an app supports password changes.
+// The second half of the password proof: get the contract salt back for an
+// existing account, encrypted so that only a completed exchange can read it.
 async function retrieveSalt (identityContractID, password) {
   const contract = encodeURIComponent(identityContractID)
   const { c, ...proof } = await provePassword(identityContractID, password)
@@ -324,7 +329,7 @@ export async function restoreSession () {
 
   await retainOrSync(identityContractID)
   sbp('chelonia/kv/refreshFilters')
-  await openLists(identityContractID)
+  await loadListsAndQueue(identityContractID)
   return identityContractID
 }
 
@@ -333,24 +338,18 @@ async function enterSession (identityContractID) {
   // The slot's `match` reads loggedIn, which Chelonia cannot watch.
   sbp('chelonia/kv/refreshFilters')
   await sbp('chelonia/contract/wait', [identityContractID])
-  await openLists(identityContractID)
+  await loadListsAndQueue(identityContractID)
 }
 
 // Queued writes for a list this account is not in belong to whoever used this
 // browser before, so the lists have to be known first.
-async function openLists (identityContractID) {
+async function loadListsAndQueue (identityContractID) {
   await loadLists(identityContractID)
   await loadOfflineQueue((contractID) => currentLists().includes(contractID))
 }
 
-function currentIdentity () {
-  const identityContractID = state.loggedIn?.identityContractID
-  if (!identityContractID) throw new AuthError('Not logged in.')
-  return identityContractID
-}
-
 export async function changePassword ({ oldPassword, newPassword }) {
-  const identityContractID = currentIdentity()
+  const identityContractID = requireIdentity()
   const identityState = state[identityContractID]
   const contract = encodeURIComponent(identityContractID)
 
@@ -368,8 +367,7 @@ export async function changePassword ({ oldPassword, newPassword }) {
     ).then((response) => response.json())
     ;[oldContractSalt, updateToken] = JSON.parse(decryptContractSalt(c, encrypted))
   } catch (e) {
-    if (e instanceof AuthError && e.exact) throw e
-    throw new AuthError('Incorrect password.', { cause: e })
+    throw wrongPassword(e)
   }
 
   const oldIPK = await deriveKeyFromPassword(EDWARDS25519SHA512BATCH, oldPassword, oldContractSalt)
@@ -379,10 +377,8 @@ export async function changePassword ({ oldPassword, newPassword }) {
 
   // Read while the old IEK is still the current key.
   const encryptedToken = identityState.attributes?.encryptedDeletionToken
-  const deletionToken = encryptedToken && encryptedIncomingData(
-    identityContractID, identityState, encryptedToken, NaN,
-    { [keyId(oldIEK)]: oldIEK }, 'encryptedDeletionToken'
-  ).valueOf()
+  const deletionToken = encryptedToken &&
+    openDeletionToken(identityContractID, identityState, encryptedToken, oldIEK)
 
   sbp('chelonia/storeSecretKeys', new Secret(
     [oldIPK, oldIEK, IPK, IEK].map((key) => ({ key, transient: true }))
@@ -448,24 +444,20 @@ export async function changePassword ({ oldPassword, newPassword }) {
 }
 
 export async function deleteAccount ({ password }) {
-  const identityContractID = currentIdentity()
+  const identityContractID = requireIdentity()
   const identityState = state[identityContractID]
   const encryptedToken = identityState?.attributes?.encryptedDeletionToken
   if (!encryptedToken) {
-    throw new AuthError('This account was made before deleting was possible.')
+    throw new AuthError('This account was made before account deletion was added.')
   }
 
   let token
   try {
     const contractSalt = await retrieveSalt(identityContractID, password)
     const IEK = await deriveKeyFromPassword(CURVE25519XSALSA20POLY1305, password, contractSalt)
-    token = encryptedIncomingData(
-      identityContractID, identityState, encryptedToken, NaN,
-      { [keyId(IEK)]: IEK }, 'encryptedDeletionToken'
-    ).valueOf()
+    token = openDeletionToken(identityContractID, identityState, encryptedToken, IEK)
   } catch (e) {
-    if (e instanceof AuthError && e.exact) throw e
-    throw new AuthError('Incorrect password.', { cause: e })
+    throw wrongPassword(e)
   }
 
   // The server takes it from here and also deletes the lists this account

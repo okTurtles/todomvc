@@ -16,7 +16,12 @@ const QUEUE_KEY = 'todomvc/pending-writes'
 const NO_WRITES = Object.freeze([])
 
 export const pendingWrites = () => state.pendingWrites ?? NO_WRITES
-export const rejectedWrite = () => state.rejectedWrite ?? ''
+export const rejectedWriteMessage = () => state.rejectedWrite ?? ''
+
+// Set when a session opens. `load` retries every stored write before we get a
+// chance to filter them, so the failure handler needs this to tell one of ours
+// from one left behind by whoever used this browser before.
+let isOurWrite = () => false
 
 export function setupOfflineQueue () {
   ensureRandomUUID()
@@ -37,8 +42,13 @@ export function setupOfflineQueue () {
     // what the queue is for. Anything else means it answered and will not take
     // this write, so retrying forever would only hide it.
     if (error instanceof TypeError) return
-    console.error('[todomvc] the server refused a queued write', error)
-    state.rejectedWrite = 'A change made offline was refused by the server.'
+    const action = sbp('chelonia.persistentActions/status').find((a) => a.id === id)
+    // A write for a list this account is not in belongs to whoever used this
+    // browser before. Dropped without a word, since it is not ours to report.
+    if (action && isOurWrite(action.invocation[1])) {
+      console.error('[todomvc] the server refused a queued write', error)
+      state.rejectedWrite = 'A change made offline was refused by the server.'
+    }
     sbp('chelonia.persistentActions/cancel', id)
     forget({ id })
   })
@@ -82,6 +92,12 @@ function keepQueueInLocalStorage () {
 // The overlay is rebuilt from the queue rather than from the saved state, so
 // what is shown cannot drift from what will actually be sent.
 export async function loadOfflineQueue (isOurs) {
+  isOurWrite = isOurs
+  // Both are saved with the rest of the state. The overlay is rebuilt below,
+  // and the notice is about a write that is already gone, so neither should
+  // survive into this session.
+  state.pendingWrites = []
+  delete state.rejectedWrite
   await sbp('chelonia.persistentActions/load')
   for (const action of sbp('chelonia.persistentActions/status')) {
     if (!isOurs(action.invocation[1])) await sbp('chelonia.persistentActions/cancel', action.id)
@@ -100,6 +116,7 @@ export function queueWrite (invocation, write) {
 export const retryPendingWrites = () => sbp('chelonia.persistentActions/retryAll')
 
 export async function dropPendingWrites () {
+  isOurWrite = () => false
   for (const { id } of sbp('chelonia.persistentActions/status')) {
     await sbp('chelonia.persistentActions/cancel', id)
   }

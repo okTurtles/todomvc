@@ -21,6 +21,7 @@ import {
   serializeKey
 } from '@chelonia/crypto'
 import { CONTRACT_NAME, LIST_CONTRACT_NAME } from './config.js'
+import { AuthError } from './errors.js'
 import { state } from './state.js'
 import { addList, listsSchema } from './lists-model.js'
 
@@ -89,9 +90,11 @@ async function openLists (contractIDs = currentLists()) {
   sbp('chelonia/kv/refreshFilters')
 }
 
-function requireIdentity () {
+// Exported because auth.js needs the same check, and the account screens show
+// an AuthError's message as it is.
+export function requireIdentity () {
   const identityContractID = state.loggedIn?.identityContractID
-  if (!identityContractID) throw new Error('Not logged in')
+  if (!identityContractID) throw new AuthError('Not logged in.')
   return identityContractID
 }
 

@@ -12,7 +12,7 @@ import {
   todosStatus
 } from '../chelonia/todos.js'
 import { connection } from '../chelonia/connection.js'
-import { rejectedWrite } from '../chelonia/offline.js'
+import { rejectedWriteMessage } from '../chelonia/offline.js'
 import { MAX_TITLE_LENGTH, sortedTodos } from '../chelonia/todos-model.js'
 
 const props = defineProps({
@@ -48,7 +48,7 @@ const offline = computed(() => !connection.online)
 // Writes queued for the server, shown on top of the list until they land.
 const waiting = computed(() => pendingCount(props.listId))
 // A queued write the server refused. It is gone from the list by now.
-const refused = computed(() => rejectedWrite())
+const refused = computed(() => rejectedWriteMessage())
 
 function readFilter () {
   const name = window.location.hash.replace(/^#\/?/, '')
