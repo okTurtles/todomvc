@@ -130,6 +130,10 @@ function finishEditing () {
       </p>
     </div>
 
+    <p v-if="!connection.online" class="list-note">
+      Lists can only be made, renamed or shared while connected. Todos can be
+      changed either way.
+    </p>
     <p v-if="error" class="list-error">{{ error }}</p>
   </section>
 </template>
