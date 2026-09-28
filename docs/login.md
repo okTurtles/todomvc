@@ -5,9 +5,11 @@ happens without any of this; start there if you have not.
 
 ## The two salts
 
-The password never leaves the browser, and neither does anything that would let
-the server work the password out. What the server keeps instead are two salts
-and a hash, and which salt does what is worth knowing before reading the steps:
+The password never leaves the browser. What the server keeps instead are two
+salts and a hash of the password, which is not the same as keeping nothing:
+whoever holds that hash can guess passwords against it offline, so the salts and
+the cost of the hash are what stand between a weak password and the account.
+Which salt does what is worth knowing before reading the steps:
 
 | name | kept by | used for |
 | --- | --- | --- |
@@ -16,9 +18,9 @@ and a hash, and which salt does what is worth knowing before reading the steps:
 
 The authentication salt is public in practice, since the server gives it to
 anyone who asks for an account by name. The contract salt is not: the server
-only releases it to someone who has just shown they know the password. That is
-what keeps the account's keys out of reach of anyone guessing passwords offline,
-because guessing is useless without a salt you cannot get.
+only releases it to someone who has just shown they know the password. So a
+stolen hash lets someone guess at the password, but it does not on its own put
+the account's keys in reach, because those need the contract salt too.
 
 The full scheme, including why it is built this way, is in okTurtles's
 [password salting](https://gitlab.okturtles.org/okturtles/group-income-simple/-/wikis/E2E-Protocol/Password-salting.md)
@@ -35,12 +37,14 @@ because both can be worked out again from the password:
 | `iek` | encrypts the account's other secret keys, so they can travel inside the contract |
 
 Three more are generated at random and stay with the account for its life. They
-are the ones described in [sharing.md](sharing.md): `csk` signs, `cek`
-encrypts, and `#sak` is what the server checks before serving the account's
-key/value store. Their secret halves are stored inside the contract itself,
-each one encrypted with the `iek`. That is what makes logging in on a machine
-that has never seen the account possible: work out the `iek` again from the
-password, and it opens the other three.
+are the ones described in [sharing.md](sharing.md): `csk` signs and `cek`
+encrypts. `#sak` is how the server knows which account is behind a request, so
+it can be billed and counted against that account, and serving
+`/kv/:contractID/:key` is one of the things it is checked for. Their secret
+halves are stored inside the contract itself, each one encrypted with the
+`iek`. That is what makes logging in on a machine that has never seen the
+account possible: work out the `iek` again from the password, and it opens the
+other three.
 
 ## Signup
 
@@ -55,7 +59,11 @@ password, and it opens the other three.
    the `shelter-namespace-registration` header and the one-time token from step
    1 in `shelter-salt-registration-token`, which is what makes the server
    accept a contract with no account to bill it to.
-5. Keep `csk`, `cek` and `#sak`. Throw away `ipk` and `iek`.
+5. Keep the secret halves of `csk`, `cek` and `#sak`, which is what Chelonia
+   needs to sign and read from here on. Throw away the secret halves of `ipk`
+   and `iek`: their public halves stay in the contract, and the secrets are
+   worked out from the password again when they are needed. Nothing derived
+   from the password is left in the browser after this.
 6. Create the account's first list. See [sharing.md](sharing.md).
 
 ## Login

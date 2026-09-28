@@ -448,7 +448,7 @@ export async function deleteAccount ({ password }) {
   const identityState = state[identityContractID]
   const encryptedToken = identityState?.attributes?.encryptedDeletionToken
   if (!encryptedToken) {
-    throw new AuthError('This account was made before account deletion was added.')
+    throw new AuthError('This account has no deletion token.')
   }
 
   let token

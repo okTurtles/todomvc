@@ -14,8 +14,11 @@
 // a contract of that type. See src/serve/routes.ts in okTurtles/chel.
 // TODO: END REMOVEME (okTurtles/chel#160)
 
-// Encrypted data on the wire is a `[keyId, ciphertext]` pair.
-const isEncrypted = (v) => Array.isArray(v) && v.length === 2 && v.every((s) => typeof s === 'string')
+// Encrypted data on the wire is a `[keyId, ciphertext]` pair. The check is the
+// library's own: Chelonia gives the sandbox a `require` that resolves the
+// modules the app lists in `contracts.defaults.modules`, so there is no second
+// copy of the rule here. See src/chelonia/config.js.
+const { isRawEncryptedData } = require('@chelonia/lib/encryptedData')
 
 sbp('chelonia/defineContract', {
   name: 'gi.contracts/identity',
@@ -27,10 +30,10 @@ sbp('chelonia/defineContract', {
         if (typeof data?.attributes?.username !== 'string') {
           throw new TypeError('attributes.username must be a string')
         }
-        // Lets the account delete itself later. Accounts made before it
-        // existed do not have one.
+        // Lets the account delete itself later. Optional because the contract
+        // does not require one, not because this app leaves it out.
         const token = data.attributes.encryptedDeletionToken
-        if (token !== undefined && !isEncrypted(token)) {
+        if (token !== undefined && !isRawEncryptedData(token)) {
           throw new TypeError('attributes.encryptedDeletionToken must be encrypted data')
         }
       },
@@ -42,7 +45,7 @@ sbp('chelonia/defineContract', {
     // change publishes it again under the new one.
     'gi.contracts/identity/setDeletionToken': {
       validate (data) {
-        if (!isEncrypted(data?.encryptedDeletionToken)) {
+        if (!isRawEncryptedData(data?.encryptedDeletionToken)) {
           throw new TypeError('encryptedDeletionToken must be encrypted data')
         }
       },

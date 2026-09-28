@@ -74,6 +74,12 @@ function ensureRandomUUID () {
 
 // chelonia.db is an in-memory map in this app, and the queue has to outlive a
 // reload, so this one key goes to localStorage instead.
+//
+// sessionStorage would fit the rest of the database better, since that is
+// thrown away too, and it would give each window its own queue. It loses more
+// than it gains though: a change queued while the server was away is sent on
+// the next visit with localStorage, and with sessionStorage it is gone as soon
+// as the tab closes, without anything being said.
 function keepQueueInLocalStorage () {
   const get = sbp('sbp/selectors/fn', 'chelonia.db/get')
   const set = sbp('sbp/selectors/fn', 'chelonia.db/set')
