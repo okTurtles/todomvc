@@ -13,6 +13,7 @@ src/chelonia/lists.js       creating a list, inviting, joining
 src/chelonia/lists-model.js the lists schema and its one reducer, both pure
 src/chelonia/todos.js       the todos slot and the six writes
 src/chelonia/todos-model.js the schema and the reducers, both pure
+src/chelonia/offline.js     the queue for writes made while the server is away
 src/components/             Vue, and nothing else
 scripts/build-contracts.mjs chel manifest -> chel pin -> manifest CID
 scripts/chel.mjs            runs chel from node_modules, see below
@@ -45,8 +46,16 @@ database backend, and a `server_id` the server refuses to start without).
 `chel init` generates it with the in-memory backend, which loses every account
 on restart, so the script switches it to sqlite under `data/`.
 
+Ctrl+C stops `npm run serve` and everything under it. In a script, killing only
+the `scripts/chel.mjs` process by name leaves the server it spawned running, so
+signal the process group or use the port: `lsof -ti:8000 | xargs kill`.
+
 After a full rebuild, restart `npm run serve`. Vite empties `dist/` and a
 server that was already running answers 404 until it is restarted.
+
+The app is built with `LIGHTWEIGHT_CLIENT=true` (see `vite.config.js`), the
+same as Group Income: the browser keeps no message log, and Chelonia reads each
+contract's HEAD from the saved state.
 
 The contract version comes from `version` in `package.json`. Editing a contract
 without bumping it makes the build stop, since the app would then be built
@@ -56,6 +65,10 @@ against a manifest the accounts already on the server do not have.
 
 Each one is fenced in the source with `TODO: BEGIN REMOVEME (issue)` and
 `TODO: END REMOVEME (issue)`, so `grep REMOVEME` finds them all.
+
+Several of these are already fixed upstream but not published. The app pins
+`@chelonia/lib` 1.5.0 and `@chelonia/cli` 3.4.0, so a merged fix changes nothing
+here until there is a release to bump to.
 
 - `scripts/chel.mjs` and `.github/workflows/ci.yml`: the published
   `@chelonia/cli` 3.4.0 cannot load SQLite on its own, so chel is run with
@@ -69,13 +82,23 @@ Each one is fenced in the source with `TODO: BEGIN REMOVEME (issue)` and
   contract created without an account to bill it to under that exact name.
   [chel#160](https://github.com/okTurtles/chel/issues/160).
 - `src/chelonia/auth.js`, `lookupUsername`: replaced by
-  `chelonia/out/nameToContractID` once a `@chelonia/lib` release has
+  `chelonia/out/nameToContractID`. Merged as
+  [libcheloniajs#95](https://github.com/okTurtles/libcheloniajs/pull/95),
+  tracked as
   [libcheloniajs#90](https://github.com/okTurtles/libcheloniajs/issues/90).
 - `src/chelonia/auth.js`, signup error message: the publish error carries the
-  HTTP status once a release has the fix for
+  HTTP status, so signup can say why it failed. Merged as
+  [libcheloniajs#97](https://github.com/okTurtles/libcheloniajs/pull/97),
+  tracked as
   [libcheloniajs#94](https://github.com/okTurtles/libcheloniajs/issues/94).
 - `src/chelonia/auth.js`, `USERNAME_REGEX`: a copy of chel's private
   `NAME_REGEX`. Goes once chel exports the rule.
+- `src/chelonia/offline.js`, `ensureRandomUUID`: `@chelonia/lib` builds
+  persistent action ids with `crypto.randomUUID`, which browsers only provide
+  on https and localhost, so the demo breaks over the LAN. Merged as
+  [libcheloniajs#101](https://github.com/okTurtles/libcheloniajs/pull/101),
+  tracked as
+  [libcheloniajs#100](https://github.com/okTurtles/libcheloniajs/issues/100).
 - `src/chelonia/auth.js`, the key list in `signup`: gets shorter once
   [libcheloniajs#91](https://github.com/okTurtles/libcheloniajs/issues/91)
   lands. Not a removal, so it is a plain TODO.

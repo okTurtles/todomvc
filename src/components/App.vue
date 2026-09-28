@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { currentUsername, logout, state } from '../chelonia/index.js'
+import { currentUsername, logout, pendingWrites, state } from '../chelonia/index.js'
 import { currentLists, listIsPending, readInvite } from '../chelonia/lists.js'
+import AccountPanel from './AccountPanel.vue'
 import AuthView from './AuthView.vue'
 import JoinView from './JoinView.vue'
 import ListsBar from './ListsBar.vue'
@@ -16,9 +17,13 @@ const username = computed(() => currentUsername())
 const lists = computed(() => currentLists())
 const invite = ref(readInvite())
 const selectedListId = ref(null)
+const showAccount = ref(false)
 
 // A list that was just joined has no keys yet, so nothing about it can be read.
 const pending = computed(() => !!selectedListId.value && listIsPending(selectedListId.value))
+
+// The panel must not still be open for whoever logs in next.
+watch(loggedIn, (open) => { if (!open) showAccount.value = false })
 
 // Lists arrive after login and can arrive later still, when another tab adds
 // one or an invite is answered.
@@ -40,6 +45,11 @@ onMounted(() => window.addEventListener('hashchange', onHashChange))
 onUnmounted(() => window.removeEventListener('hashchange', onHashChange))
 
 async function onLogout () {
+  // Logging out drops this account's keys, so a queued write can never be sent.
+  const waiting = pendingWrites().length
+  if (waiting && !window.confirm(
+    `${waiting} change${waiting === 1 ? '' : 's'} made offline will be lost. Log out anyway?`
+  )) return
   try {
     await logout()
   } catch (e) {
@@ -57,6 +67,7 @@ async function onLogout () {
     </p>
     <template v-else-if="loggedIn">
       <JoinView v-if="invite" :invite="invite" @done="onJoined" />
+      <AccountPanel v-else-if="showAccount" @close="showAccount = false" />
       <template v-else>
         <ListsBar v-model="selectedListId" :lists="lists" :pending="pending" />
         <p v-if="pending" class="list-pending">
@@ -69,6 +80,7 @@ async function onLogout () {
     <AuthView v-else :invited="!!invite" />
     <footer v-if="loggedIn" class="session">
       signed in as <strong>{{ username }}</strong>
+      <button type="button" class="link" @click="showAccount = !showAccount">account</button>
       <button type="button" class="link" @click="onLogout">log out</button>
     </footer>
   </main>

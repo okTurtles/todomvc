@@ -8,11 +8,17 @@
 // the keys and gives `/kv/:contractID/:key` its scope.
 //
 // TODO: BEGIN REMOVEME (okTurtles/chel#160)
-// The name has to be `gi.contracts/identity`, here and on the action below.
+// The name has to be `gi.contracts/identity`, here and on the actions below.
 // chel's POST /event only accepts a contract created without an account to
 // bill it to when the manifest name is that, and only registers a username for
 // a contract of that type. See src/serve/routes.ts in okTurtles/chel.
 // TODO: END REMOVEME (okTurtles/chel#160)
+
+// Encrypted data on the wire is a `[keyId, ciphertext]` pair. The check is the
+// library's own: Chelonia gives the sandbox a `require` that resolves the
+// modules the app lists in `contracts.defaults.modules`, so there is no second
+// copy of the rule here. See src/chelonia/config.js.
+const { isRawEncryptedData } = require('@chelonia/lib/encryptedData')
 
 sbp('chelonia/defineContract', {
   name: 'gi.contracts/identity',
@@ -24,9 +30,27 @@ sbp('chelonia/defineContract', {
         if (typeof data?.attributes?.username !== 'string') {
           throw new TypeError('attributes.username must be a string')
         }
+        // Lets the account delete itself later. Optional because the contract
+        // does not require one, not because this app leaves it out.
+        const token = data.attributes.encryptedDeletionToken
+        if (token !== undefined && !isRawEncryptedData(token)) {
+          throw new TypeError('attributes.encryptedDeletionToken must be encrypted data')
+        }
       },
       process ({ data }, { state }) {
         state.attributes = { ...data.attributes }
+      }
+    },
+    // The token is encrypted with a password-derived key, so a password
+    // change publishes it again under the new one.
+    'gi.contracts/identity/setDeletionToken': {
+      validate (data) {
+        if (!isRawEncryptedData(data?.encryptedDeletionToken)) {
+          throw new TypeError('encryptedDeletionToken must be encrypted data')
+        }
+      },
+      process ({ data }, { state }) {
+        state.attributes.encryptedDeletionToken = data.encryptedDeletionToken
       }
     }
   }

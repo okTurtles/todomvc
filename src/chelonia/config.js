@@ -1,5 +1,6 @@
 import sbp from '@sbp/sbp'
 import '@chelonia/lib'
+import { isRawEncryptedData } from '@chelonia/lib/encryptedData'
 import manifestsFile from '../contracts/manifests.json'
 import './state.js'
 
@@ -31,7 +32,11 @@ export async function configureChelonia () {
         // The contract calls no selectors, so nothing needs allowing through.
         allowedSelectors: [],
         allowedDomains: [],
-        preferSlim: false
+        preferSlim: false,
+        // What the contract is allowed to `require`. Chelonia gives the
+        // sandbox a `require` that resolves only what is listed here, which is
+        // how a contract shares code without bundling any.
+        modules: { '@chelonia/lib/encryptedData': { isRawEncryptedData } }
       }
     }
   })

@@ -33,7 +33,7 @@ their own number is what makes handing the list over a single step: whoever
 receives the `cek` can then read the other two out of the contract.
 
 The same three secrets also go to the creator's *own* identity contract, with
-`chelonia/out/keyShare`, encrypted to that identity's `cek`. Without this step
+`chelonia/out/keyShare`, encrypted with that identity's `cek`. Without this step
 they would exist only in the browser that made the list, and logging out would
 lose it. Logging in replays the identity log and they come back.
 

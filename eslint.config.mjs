@@ -32,8 +32,9 @@ export default [
     }
   },
   {
-    // Contracts run in Chelonia's sandbox, which provides `sbp` as a global.
+    // Contracts run in Chelonia's sandbox, which provides `sbp` and a
+    // `require` limited to the modules the app passes in.
     files: ['src/contracts/*.js'],
-    languageOptions: { globals: { sbp: 'readonly' } }
+    languageOptions: { globals: { sbp: 'readonly', require: 'readonly' } }
   }
 ]
