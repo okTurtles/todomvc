@@ -1,6 +1,6 @@
 # Signup and login, step by step
 
-This is for someone reading `src/chelonia/auth.js`. The README explains what
+This is for someone reading `src/chelonia/auth.ts`. The README explains what
 happens without any of this; start there if you have not.
 
 ## The two salts

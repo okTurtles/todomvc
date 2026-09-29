@@ -1,6 +1,6 @@
 # Sharing a list, message by message
 
-This is for someone reading `src/chelonia/lists.js`. The README explains what
+This is for someone reading `src/chelonia/lists.ts`. The README explains what
 sharing does without any of this; start there if you have not.
 
 Chelonia names three of a contract's cryptographic keys, and this document uses

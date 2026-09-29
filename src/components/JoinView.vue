@@ -1,16 +1,15 @@
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
-import { acceptInvite, clearInvite } from '../chelonia/lists.js'
+import { acceptInvite, clearInvite } from '../chelonia/lists.ts'
+import type { ContractID, Invite } from '../types.ts'
 
-const props = defineProps({
-  invite: { type: Object, required: true }
-})
-const emit = defineEmits(['done'])
+const props = defineProps<{ invite: Invite }>()
+const emit = defineEmits<{ done: [contractID: ContractID | null] }>()
 
 const busy = ref(false)
 const error = ref('')
 
-async function join () {
+async function join (): Promise<void> {
   error.value = ''
   busy.value = true
   try {
@@ -23,7 +22,7 @@ async function join () {
   }
 }
 
-function done (contractID = null) {
+function done (contractID: ContractID | null = null): void {
   clearInvite()
   emit('done', contractID)
 }

@@ -13,7 +13,7 @@ import { existsSync } from 'node:fs'
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
-import { chel } from './chel.mjs'
+import { chel } from './chel.ts'
 
 const CONTRACTS = [
   // TODO: BEGIN REMOVEME (okTurtles/chel#160)
@@ -26,7 +26,7 @@ const CONTRACTS = [
 ]
 
 const root = path.resolve(import.meta.dirname, '..')
-const at = (...p) => path.join(root, ...p)
+const at = (...p: string[]) => path.join(root, ...p)
 
 // Single version source-of-truth
 // Updating version in package.json will allow pinning to automatically
@@ -66,7 +66,7 @@ if (!existsSync(keyFile)) {
 
 await mkdir(buildDir, { recursive: true })
 
-const manifests = {}
+const manifests: Record<string, string> = {}
 
 for (const { name, file } of CONTRACTS) {
   const sourcePath = at('src/contracts', file)

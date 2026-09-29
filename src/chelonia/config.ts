@@ -2,7 +2,7 @@ import sbp from '@sbp/sbp'
 import '@chelonia/lib'
 import { isRawEncryptedData } from '@chelonia/lib/encryptedData'
 import manifestsFile from '../contracts/manifests.json'
-import './state.js'
+import './state.ts'
 
 // TODO: BEGIN REMOVEME (okTurtles/chel#160)
 // This is Group Income's identity contract name, but the contract is our own,
@@ -20,7 +20,7 @@ export const LIST_CONTRACT_NAME = 'todomvc/list'
 // The same chel serve process answers /event, /name, /kv and the pubsub socket.
 export const API_URL = window.location.origin
 
-export async function configureChelonia () {
+export async function configureChelonia (): Promise<void> {
   await sbp('chelonia/configure', {
     connectionURL: API_URL,
     stateSelector: 'todomvc/state',

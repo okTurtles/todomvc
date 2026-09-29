@@ -1,8 +1,8 @@
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
-import { AuthError, changePassword, deleteAccount } from '../chelonia/index.js'
+import { AuthError, changePassword, deleteAccount } from '../chelonia/index.ts'
 
-const emit = defineEmits(['close'])
+const emit = defineEmits<{ close: [] }>()
 
 const oldPassword = ref('')
 const newPassword = ref('')
@@ -11,7 +11,7 @@ const busy = ref(false)
 const message = ref('')
 const error = ref('')
 
-async function run (task, done = '') {
+async function run (task: () => Promise<void>, done = ''): Promise<void> {
   error.value = ''
   message.value = ''
   busy.value = true

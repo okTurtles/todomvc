@@ -2,7 +2,7 @@
 // go through the KV slot, and two browsers really converge.
 
 import { expect, test } from '@playwright/test'
-import { PASSWORD, addTodo, login, newUsername, signup, titles } from './helpers.mjs'
+import { PASSWORD, addTodo, login, newUsername, signup, titles } from './helpers.ts'
 
 test('a session survives a reload', async ({ page }) => {
   await signup(page)

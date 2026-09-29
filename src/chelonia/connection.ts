@@ -6,14 +6,14 @@ import {
   PUBSUB_RECONNECTION_SCHEDULED,
   PUBSUB_RECONNECTION_SUCCEEDED
 } from '@chelonia/lib/pubsub'
-import { retryPendingWrites } from './offline.js'
+import { retryPendingWrites } from './offline.ts'
 
 // The socket is the only thing that says the server went away mid-session.
 // Reads keep working off the mirror, so without this the app would not know
 // to queue writes instead of sending them.
 export const connection = reactive({ online: true })
 
-export function watchConnection () {
+export function watchConnection (): void {
   const lost = () => { connection.online = false }
 
   // Emitted when the socket closes and a retry is queued, on each retry, and

@@ -28,7 +28,7 @@ jobs:
       - run: npm ci
 
       # TODO: BEGIN REMOVEME (okTurtles/chel#150)
-      # chel cannot fetch its own SQLite library, so scripts/chel.mjs points it
+      # chel cannot fetch its own SQLite library, so scripts/chel.ts points it
       # at the system one. Usually already present.
       - name: Make sure the system SQLite library is there
         run: |
@@ -41,6 +41,9 @@ jobs:
       - run: npx playwright install --with-deps chromium
 
       - run: npm run lint
+
+      # Builds the contracts first: config.ts imports the manifest CIDs.
+      - run: npm run typecheck
 
       - run: npm test
 

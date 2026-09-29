@@ -13,7 +13,7 @@ you want the details.
 
 ## Running it
 
-Node 22 or newer.
+Node 22.18 or newer, which runs the TypeScript scripts without a build step.
 
 ```bash
 npm install

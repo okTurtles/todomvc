@@ -30,28 +30,48 @@ import {
   keygen,
   serializeKey
 } from '@chelonia/crypto'
-import { API_URL, CONTRACT_NAME } from './config.js'
-import { AuthError } from './errors.js'
+import type { ChelContractState } from '@chelonia/lib/types'
+import { API_URL, CONTRACT_NAME } from './config.ts'
+import { AuthError } from './errors.ts'
 import {
   createList, currentLists, keyIdByName, loadLists, requireIdentity, retainOrSync
-} from './lists.js'
-import { dropPendingWrites, loadOfflineQueue } from './offline.js'
-import { clearSavedState, persistState, state } from './state.js'
+} from './lists.ts'
+import { dropPendingWrites, loadOfflineQueue } from './offline.ts'
+import { clearSavedState, persistState, state } from './state.ts'
+import type { ContractID } from '../types.ts'
+
+// A password-derived or generated key, as @chelonia/crypto hands them back.
+type Key = ReturnType<typeof keygen>
+
+// The identity contract's state, with the attributes this app writes to it.
+// Encrypted data on the wire is a `[keyId, ciphertext]` pair, the same shape
+// the contract checks with `isRawEncryptedData`.
+type EncryptedValue = [keyId: string, ciphertext: string]
+type IdentityState = ChelContractState & {
+  attributes?: { username?: string, encryptedDeletionToken?: EncryptedValue }
+}
+
+type Credentials = { username: string, password: string }
 
 const DEFAULT_LIST_TITLE = 'My todos'
 
 // A failure here is nearly always the password. An AuthError that already says
 // something exact is passed through as it is.
-const wrongPassword = (e) =>
+const wrongPassword = (e: unknown): AuthError =>
   e instanceof AuthError && e.exact ? e : new AuthError('Incorrect password.', { cause: e })
 
 // Opens the deletion token kept in the contract. Both password paths need it,
 // and both have to name the same additionalData string.
-const openDeletionToken = (identityContractID, identityState, encryptedToken, IEK) =>
+const openDeletionToken = (
+  identityContractID: ContractID,
+  identityState: IdentityState,
+  encryptedToken: EncryptedValue,
+  IEK: Key
+): string =>
   encryptedIncomingData(
     identityContractID, identityState, encryptedToken, NaN,
     { [keyId(IEK)]: IEK }, 'encryptedDeletionToken'
-  ).valueOf()
+  ).valueOf() as string
 
 // TODO: BEGIN REMOVEME (copy of chel's private NAME_REGEX, until chel exports it)
 // Copied from NAME_REGEX in chel's src/serve/routes.ts. The server rejects
@@ -60,7 +80,7 @@ const openDeletionToken = (identityContractID, identityState, encryptedToken, IE
 const USERNAME_REGEX = /^(?![_-])((?!([_-])\2)[a-z\d_-]){1,80}(?<![_-])$/
 // TODO: END REMOVEME (copy of chel's private NAME_REGEX, until chel exports it)
 
-function assertUsername (username) {
+function assertUsername (username: string): void {
   if (!USERNAME_REGEX.test(username)) {
     throw new AuthError(
       'Usernames can use lowercase letters, numbers, hyphen and underscore, up ' +
@@ -72,7 +92,7 @@ function assertUsername (username) {
 
 // A rejected fetch means the request never got an answer. Any status, even a
 // 500, means the server did answer.
-async function send (path, init) {
+async function send (path: string, init?: RequestInit): Promise<Response> {
   try {
     return await fetch(`${API_URL}${path}`, init)
   } catch (e) {
@@ -82,7 +102,7 @@ async function send (path, init) {
   }
 }
 
-async function request (path, init) {
+async function request (path: string, init?: RequestInit): Promise<Response> {
   const response = await send(path, init)
   if (!response.ok) {
     throw new AuthError(`${init?.method ?? 'GET'} ${path} failed: ${response.status}`)
@@ -90,19 +110,19 @@ async function request (path, init) {
   return response
 }
 
-const form = (fields) => ({
+const form = (fields: Record<string, string>): RequestInit => ({
   method: 'POST',
   headers: { 'content-type': 'application/x-www-form-urlencoded' },
   body: new URLSearchParams(fields).toString()
 })
 
 // The zkpp helpers return raw bytes; the endpoints want base64url.
-const toBase64url = (bytes) => base64ToBase64url(bytesToB64(bytes))
+const toBase64url = (bytes: Uint8Array): string => base64ToBase64url(bytesToB64(bytes))
 
 // Claims the username and returns the salt the keys are derived from, plus a
 // token that proves the claim to POST /event. The server sees a blinded hash,
 // never the password.
-async function registerSalt (username, password) {
+async function registerSalt (username: string, password: string): Promise<[string, string]> {
   const keyPair = boxKeyPair()
   const r = toBase64url(keyPair.publicKey)
   const path = `/zkpp/register/${encodeURIComponent(username)}`
@@ -125,7 +145,7 @@ async function registerSalt (username, password) {
 // the password and deleting the account all begin with this. `c` is the value
 // both sides end up with, and the server encrypts its answer with a key
 // derived from it, so only someone who finished this exchange can read it.
-async function provePassword (identityContractID, password) {
+async function provePassword (identityContractID: ContractID, password: string) {
   const nonce = randomNonce()
   const { authSalt, s, sig } = await request(
     `/zkpp/${encodeURIComponent(identityContractID)}/auth_hash` +
@@ -138,7 +158,7 @@ async function provePassword (identityContractID, password) {
 
 // The second half of the password proof: get the contract salt back for an
 // existing account, encrypted so that only a completed exchange can read it.
-async function retrieveSalt (identityContractID, password) {
+async function retrieveSalt (identityContractID: ContractID, password: string): Promise<string> {
   const contract = encodeURIComponent(identityContractID)
   const { c, ...proof } = await provePassword(identityContractID, password)
   const query = new URLSearchParams(proof)
@@ -152,7 +172,7 @@ async function retrieveSalt (identityContractID, password) {
 // TODO: BEGIN REMOVEME (okTurtles/libcheloniajs#90)
 // Replaced by `chelonia/out/nameToContractID` once a @chelonia/lib release has
 // it. The call in login() changes with it.
-async function lookupUsername (username) {
+async function lookupUsername (username: string): Promise<string | null> {
   const response = await send(`/name/${encodeURIComponent(username)}`)
   if (response.status === 404) return null
   if (!response.ok) throw new AuthError(`Username lookup failed: ${response.status}`)
@@ -160,7 +180,7 @@ async function lookupUsername (username) {
 }
 // TODO: END REMOVEME (okTurtles/libcheloniajs#90)
 
-export async function signup ({ username, password }) {
+export async function signup ({ username, password }: Credentials): Promise<ContractID> {
   assertUsername(username)
   const [contractSalt, saltRegistrationToken] = await registerSalt(username, password)
 
@@ -184,7 +204,7 @@ export async function signup ({ username, password }) {
     { key: IEK, transient: true }
   ]))
 
-  let message
+  let message: { contractID: () => ContractID }
   try {
     message = await sbp('chelonia/out/registerContract', {
       contractName: CONTRACT_NAME,
@@ -287,12 +307,12 @@ export async function signup ({ username, password }) {
   return identityContractID
 }
 
-export async function login ({ username, password }) {
+export async function login ({ username, password }: Credentials): Promise<ContractID> {
   assertUsername(username)
   const identityContractID = await lookupUsername(username)
   if (!identityContractID) throw new AuthError('Incorrect username or password.')
 
-  let IEK
+  let IEK: Key
   try {
     const contractSalt = await retrieveSalt(identityContractID, password)
     IEK = await deriveKeyFromPassword(CURVE25519XSALSA20POLY1305, password, contractSalt)
@@ -323,7 +343,7 @@ export async function login ({ username, password }) {
   return identityContractID
 }
 
-export async function restoreSession () {
+export async function restoreSession (): Promise<ContractID | null> {
   const identityContractID = state.loggedIn?.identityContractID
   if (!identityContractID) return null
 
@@ -333,7 +353,7 @@ export async function restoreSession () {
   return identityContractID
 }
 
-async function enterSession (identityContractID) {
+async function enterSession (identityContractID: ContractID): Promise<void> {
   state.loggedIn = { identityContractID }
   // The slot's `match` reads loggedIn, which Chelonia cannot watch.
   sbp('chelonia/kv/refreshFilters')
@@ -343,21 +363,23 @@ async function enterSession (identityContractID) {
 
 // Queued writes for a list this account is not in belong to whoever used this
 // browser before, so the lists have to be known first.
-async function loadListsAndQueue (identityContractID) {
+async function loadListsAndQueue (identityContractID: ContractID): Promise<void> {
   await loadLists(identityContractID)
   await loadOfflineQueue((contractID) => currentLists().includes(contractID))
 }
 
-export async function changePassword ({ oldPassword, newPassword }) {
+export async function changePassword (
+  { oldPassword, newPassword }: { oldPassword: string, newPassword: string }
+): Promise<void> {
   const identityContractID = requireIdentity()
-  const identityState = state[identityContractID]
+  const identityState = state[identityContractID] as IdentityState
   const contract = encodeURIComponent(identityContractID)
 
   // Starts with the same exchange as login. The new password's hash travels
   // encrypted with a key derived from that exchange, and the answer is the old
   // contract salt plus a one-time token, which is what lets the next message
   // swap the salts on the server.
-  let oldContractSalt, newContractSalt, updateToken
+  let oldContractSalt: string, newContractSalt: string, updateToken: string
   try {
     const { c, ...proof } = await provePassword(identityContractID, oldPassword)
     const [salt, Ea] = await buildUpdateSaltRequestEc(newPassword, c)
@@ -389,14 +411,17 @@ export async function changePassword ({ oldPassword, newPassword }) {
     // re-encrypted with the new IEK, so nothing already written to the
     // contract has to change. Each entry goes back in with its own id and
     // public half, because Chelonia matches the decrypted secret to the id.
-    const keep = (name) => {
+    const keep = (name: string) => {
       const id = keyIdByName(identityState, name)
+      const existing = identityState._vm.authorizedKeys[id]
+      const secret = state.secretKeys[id]
+      if (!existing || !secret) throw new AuthError(`Missing the ${name} key.`)
       return {
         id,
         name,
         oldKeyId: id,
-        data: identityState._vm.authorizedKeys[id].data,
-        meta: { private: { content: encryptedOutgoingDataWithRawKey(IEK, state.secretKeys[id]) } }
+        data: existing.data,
+        meta: { private: { content: encryptedOutgoingDataWithRawKey(IEK, secret) } }
       }
     }
     await sbp('chelonia/out/keyUpdate', {
@@ -443,15 +468,15 @@ export async function changePassword ({ oldPassword, newPassword }) {
   }
 }
 
-export async function deleteAccount ({ password }) {
+export async function deleteAccount ({ password }: { password: string }): Promise<void> {
   const identityContractID = requireIdentity()
-  const identityState = state[identityContractID]
+  const identityState = state[identityContractID] as IdentityState | undefined
   const encryptedToken = identityState?.attributes?.encryptedDeletionToken
   if (!encryptedToken) {
     throw new AuthError('This account has no deletion token.')
   }
 
-  let token
+  let token: string
   try {
     const contractSalt = await retrieveSalt(identityContractID, password)
     const IEK = await deriveKeyFromPassword(CURVE25519XSALSA20POLY1305, password, contractSalt)
@@ -473,12 +498,13 @@ export async function deleteAccount ({ password }) {
 
 // Read from the contract state rather than kept alongside the session, so
 // there is one copy of it.
-export function currentUsername () {
+export function currentUsername (): string | undefined {
   const identityContractID = state.loggedIn?.identityContractID
-  return identityContractID && state[identityContractID]?.attributes?.username
+  if (!identityContractID) return undefined
+  return (state[identityContractID] as IdentityState | undefined)?.attributes?.username
 }
 
-export async function logout () {
+export async function logout (): Promise<void> {
   // Unsent writes cannot go out without this account's keys.
   await dropPendingWrites()
   sbp('chelonia.persistentActions/unload')

@@ -29,7 +29,7 @@ const CHEL_BIN = path.join(
 // that is actually there. On macOS the system libraries live in the dyld shared
 // cache and there is no file to stat, so the path is used as given.
 // DENO_SQLITE_PATH from the environment always wins.
-const SYSTEM_SQLITE = {
+const SYSTEM_SQLITE: Record<string, string[] | undefined> = {
   darwin: ['/usr/lib/libsqlite3.dylib'],
   linux: [
     `/usr/lib/${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}-linux-gnu/libsqlite3.so.0`,
@@ -41,11 +41,11 @@ const SYSTEM_SQLITE = {
 const candidates = SYSTEM_SQLITE[process.platform] ?? []
 const found = process.platform === 'darwin'
   ? candidates[0]
-  : candidates.find((p) => existsSync(p))
+  : candidates.find((p: string) => existsSync(p))
 const DENO_SQLITE_PATH = process.env.DENO_SQLITE_PATH ?? found ?? ''
 // TODO: END REMOVEME (okTurtles/chel#150)
 
-export function chel (args) {
+export function chel (args: string[]): void {
   const { status, signal } = spawnSync(process.execPath, [CHEL_BIN, ...args], {
     stdio: 'inherit',
     // TODO: BEGIN REMOVEME (okTurtles/chel#150)
@@ -57,7 +57,7 @@ export function chel (args) {
   }
 }
 
-// Allow `node scripts/chel.mjs <args>` as a drop-in for the `chel` command.
+// Allow `node scripts/chel.ts <args>` as a drop-in for the `chel` command.
 // fileURLToPath, not URL.pathname: pathname is percent-encoded, so a checkout
 // path containing a space would never match and this would silently do nothing.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
