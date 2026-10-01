@@ -13,6 +13,20 @@ test('a session survives a reload', async ({ page }) => {
   await expect(titles(page)).toHaveText(['survive a reload'])
 })
 
+// Making a list adds to the account's contract, and in Chelonia's full mode
+// that needs a message log the browser does not keep across a reload. So this
+// is what breaks if the app stops running as a lightweight client.
+test('a list made after a reload is saved', async ({ page }) => {
+  await signup(page)
+  await page.reload()
+  await expect(page.locator('.list-tabs button')).toHaveText(['My todos'])
+
+  await page.getByLabel('New list').fill('made after a reload')
+  await page.getByRole('button', { name: 'Add list' }).click()
+  await expect(page.locator('.list-tabs button')).toHaveText(['My todos', 'made after a reload'])
+  await expect(page.locator('.list-error')).toBeHidden()
+})
+
 test('logging out clears the browser, logging back in recovers the todos', async ({ page }) => {
   const username = await signup(page)
   await addTodo(page, 'recovered from the contract')
@@ -91,6 +105,25 @@ test('a taken username is reported as taken', async ({ page }) => {
 
   await expect(page.locator('.auth-error')).toHaveText('That username is already taken.')
 })
+
+// The publish error carries the HTTP status on `cause`, so signup can say why
+// the server turned it down. chel answers these with a plain-text body.
+for (const [status, message] of [
+  [403, 'Signups are disabled on this server.'],
+  [429, 'Too many signups from this network. Try again in a while.']
+] as const) {
+  test(`a signup refused with ${status} says why`, async ({ page }) => {
+    await page.goto('/app/')
+    await page.getByRole('button', { name: 'Create an account' }).click()
+    await page.route('**/event', (route) => route.request().method() === 'POST'
+      ? route.fulfill({ status, contentType: 'text/plain', body: 'refused' })
+      : route.continue())
+    await page.getByLabel('Username').fill(newUsername())
+    await page.getByLabel('Password').fill(PASSWORD)
+    await page.getByRole('button', { name: 'Create account' }).click()
+    await expect(page.locator('.auth-error')).toHaveText(message)
+  })
+}
 
 test('a username the server would reject is caught before any request', async ({ page }) => {
   await page.goto('/app/')

@@ -16,12 +16,7 @@ import process from 'node:process'
 import { chel } from './chel.ts'
 
 const CONTRACTS = [
-  // TODO: BEGIN REMOVEME (okTurtles/chel#160)
-  // Until the fix is released, chel only accepts a contract created without an
-  // account to bill it to when the manifest name is exactly this. Rename then.
-  // TODO: END REMOVEME (okTurtles/chel#160)
-  { name: 'gi.contracts/identity', file: 'identity.js' },
-  // A list is created by an identity, so it is attributed and its name is free.
+  { name: 'todomvc/identity', file: 'identity.js' },
   { name: 'todomvc/list', file: 'list.js' }
 ]
 
@@ -82,7 +77,7 @@ for (const { name, file } of CONTRACTS) {
   if (existsSync(pinnedSource) && !source.equals(await readFile(pinnedSource))) {
     console.error(
       `src/contracts/${file} changed but the version is still ${VERSION}.\n` +
-      'Bump "version" in package.json, or delete data/ and contracts/ to start fresh.'
+      'Bump "version" in package.json, or delete data/, contracts/ and chelonia.json to start fresh.'
     )
     process.exit(1)
   }
