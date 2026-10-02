@@ -77,12 +77,3 @@ Each one is fenced in the source with `TODO: BEGIN REMOVEME (issue)` and
 - `src/chelonia/auth.ts`, the key list in `signup`: gets shorter once
   [libcheloniajs#91](https://github.com/okTurtles/libcheloniajs/issues/91)
   lands. Not a removal, so it is a plain TODO.
-
-## Accounts made by earlier versions
-
-Two changes left older accounts behind: todos moved from a slot on the identity
-contract into lists, and in 0.3.0 the identity contract stopped borrowing Group
-Income's name, `gi.contracts/identity`, for its own, `todomvc/identity`. An
-account made before either one still logs in, but its lists and todos do not
-appear. There is no migration, since nothing has shipped. To start fresh,
-delete `data/`, `contracts/` and `chelonia.json`.

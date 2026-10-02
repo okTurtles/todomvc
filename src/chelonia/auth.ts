@@ -293,6 +293,8 @@ export async function signup ({ username, password }: Credentials): Promise<Cont
     // The publish error carries the HTTP status on `cause`.
     if (e instanceof ChelErrorUnexpectedHttpResponseCode) {
       if (e.cause === 403) throw new AuthError('Signups are disabled on this server.')
+      // Someone took the name after the check in registerSalt.
+      if (e.cause === 409) throw new AuthError('That username is already taken.')
       if (e.cause === 429) {
         throw new AuthError('Too many signups from this network. Try again in a while.')
       }

@@ -110,6 +110,7 @@ test('a taken username is reported as taken', async ({ page }) => {
 // the server turned it down. chel answers these with a plain-text body.
 for (const [status, message] of [
   [403, 'Signups are disabled on this server.'],
+  [409, 'That username is already taken.'],
   [429, 'Too many signups from this network. Try again in a while.']
 ] as const) {
   test(`a signup refused with ${status} says why`, async ({ page }) => {
