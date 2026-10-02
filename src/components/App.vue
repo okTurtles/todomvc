@@ -1,22 +1,21 @@
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { currentUsername, logout, pendingWrites, state } from '../chelonia/index.js'
-import { currentLists, listIsPending, readInvite } from '../chelonia/lists.js'
+import { currentUsername, logout, pendingWrites, state } from '../chelonia/index.ts'
+import { currentLists, listIsPending, readInvite } from '../chelonia/lists.ts'
+import type { ContractID, Lists } from '../types.ts'
 import AccountPanel from './AccountPanel.vue'
 import AuthView from './AuthView.vue'
 import JoinView from './JoinView.vue'
 import ListsBar from './ListsBar.vue'
 import TodoApp from './TodoApp.vue'
 
-const props = defineProps({
-  bootError: { type: Error, default: null }
-})
+const props = defineProps<{ bootError?: Error | null }>()
 
 const loggedIn = computed(() => !props.bootError && !!state.loggedIn)
 const username = computed(() => currentUsername())
 const lists = computed(() => currentLists())
 const invite = ref(readInvite())
-const selectedListId = ref(null)
+const selectedListId = ref<ContractID | null>(null)
 const showAccount = ref(false)
 
 // A list that was just joined has no keys yet, so nothing about it can be read.
@@ -27,15 +26,16 @@ watch(loggedIn, (open) => { if (!open) showAccount.value = false })
 
 // Lists arrive after login and can arrive later still, when another tab adds
 // one or an invite is answered.
-watch(lists, (contractIDs) => {
-  if (!contractIDs.includes(selectedListId.value)) {
+watch(lists, (contractIDs: Lists) => {
+  const selected = selectedListId.value
+  if (!selected || !contractIDs.includes(selected)) {
     selectedListId.value = contractIDs[0] ?? null
   }
 }, { immediate: true })
 
 // Show what was just joined, even though there is nothing in it until the
 // owner answers. Nothing is passed when the invite was declined.
-function onJoined (contractID) {
+function onJoined (contractID?: ContractID | null): void {
   invite.value = null
   if (typeof contractID === 'string') selectedListId.value = contractID
 }
@@ -44,7 +44,7 @@ const onHashChange = () => { invite.value = readInvite() }
 onMounted(() => window.addEventListener('hashchange', onHashChange))
 onUnmounted(() => window.removeEventListener('hashchange', onHashChange))
 
-async function onLogout () {
+async function onLogout (): Promise<void> {
   // Logging out drops this account's keys, so a queued write can never be sent.
   const waiting = pendingWrites().length
   if (waiting && !window.confirm(

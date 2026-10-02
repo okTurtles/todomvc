@@ -20,48 +20,51 @@ import {
   keygen,
   serializeKey
 } from '@chelonia/crypto'
-import { CONTRACT_NAME, LIST_CONTRACT_NAME } from './config.js'
-import { AuthError } from './errors.js'
-import { state } from './state.js'
-import { addList, listsSchema } from './lists-model.js'
+import type { ChelContractState } from '@chelonia/lib/types'
+import { CONTRACT_NAME, LIST_CONTRACT_NAME } from './config.ts'
+import { AuthError } from './errors.ts'
+import { state } from './state.ts'
+import { addList, listsSchema } from './lists-model.ts'
+import type { ContractID, Invite, Lists } from '../types.ts'
 
 const LISTS_KEY = 'lists'
-const NO_LISTS = Object.freeze([])
+const NO_LISTS: Lists = Object.freeze([])
 const INVITE_LIFETIME = 7 * 24 * 60 * 60 * 1000
 
-export function defineListsSlot () {
+export function defineListsSlot (): void {
   sbp('chelonia/kv/defineSlot', {
     contractType: CONTRACT_NAME,
     key: LISTS_KEY,
     defaultValue: [],
     schema: listsSchema,
-    match: (contractID) => contractID === state.loggedIn?.identityContractID,
+    match: (contractID: ContractID) => contractID === state.loggedIn?.identityContractID,
     // A list ID landing here, from our own write or from another tab, is what
     // starts that list: open it, then let the todos slot attach to it.
-    onUpdate: (value) => {
+    onUpdate: (value: Lists) => {
       openLists(value).catch((e) => console.error('[todomvc] could not open the lists', e))
     }
   })
 }
 
-export function currentLists () {
+export function currentLists (): Lists {
   const identityContractID = state.loggedIn?.identityContractID
   if (!identityContractID) return NO_LISTS
   const entry = state._kv?.[identityContractID]?.[LISTS_KEY]
   if (!entry) return NO_LISTS
-  return entry.value ?? sbp('chelonia/kv/read', identityContractID, LISTS_KEY)
+  return (entry.value ?? sbp('chelonia/kv/read', identityContractID, LISTS_KEY)) as Lists
 }
 
 // From the list contract, so everyone sharing it sees the same title. Missing
 // until the key request is answered: the action carrying it is encrypted.
-export const listTitle = (contractID) => state[contractID]?.attributes?.title
+export const listTitle = (contractID: ContractID): string | undefined =>
+  (state[contractID] as ChelContractState & { attributes?: { title?: string } })?.attributes?.title
 
 // No title means no keys yet.
-export const listIsPending = (contractID) => !listTitle(contractID)
+export const listIsPending = (contractID: ContractID): boolean => !listTitle(contractID)
 
 // The slot loads itself after a sync, but a reload starts with the saved mirror
 // already right, and an unchanged value is not an update. So force one read.
-export async function loadLists (identityContractID) {
+export async function loadLists (identityContractID: ContractID): Promise<void> {
   try {
     await sbp('chelonia/kv/sync', identityContractID, LISTS_KEY)
   } catch (e) {
@@ -72,12 +75,14 @@ export async function loadLists (identityContractID) {
 
 // A reload starts with the reference already in the saved state, so retaining
 // again would leak one.
-export const retainOrSync = (contractID) =>
-  state.contracts?.[contractID]?.references
+export const retainOrSync = (contractID: ContractID): Promise<unknown> =>
+  // `references` is missing from @chelonia/lib's type here, but it is the
+  // count that retain and release change.
+  (state.contracts?.[contractID] as { references?: number } | undefined)?.references
     ? sbp('chelonia/contract/sync', [contractID])
     : sbp('chelonia/contract/retain', [contractID])
 
-async function openLists (contractIDs = currentLists()) {
+async function openLists (contractIDs: Lists = currentLists()): Promise<void> {
   for (const contractID of contractIDs) {
     try {
       await retainOrSync(contractID)
@@ -90,18 +95,26 @@ async function openLists (contractIDs = currentLists()) {
   sbp('chelonia/kv/refreshFilters')
 }
 
-// Exported because auth.js needs the same check, and the account screens show
+// Exported because auth.ts needs the same check, and the account screens show
 // an AuthError's message as it is.
-export function requireIdentity () {
+export function requireIdentity (): ContractID {
   const identityContractID = state.loggedIn?.identityContractID
   if (!identityContractID) throw new AuthError('Not logged in.')
   return identityContractID
 }
 
-export const keyIdByName = (contractIDOrState, name) =>
+export const keyIdByName = (contractIDOrState: ContractID | ChelContractState, name: string): string =>
   sbp('chelonia/contract/currentKeyIdByName', contractIDOrState, name)
 
-export async function createList (title) {
+// Only called on contracts that are already synced, so a missing state is a
+// bug rather than something to handle.
+const contractState = (contractID: ContractID): ChelContractState => {
+  const contract = state[contractID]
+  if (!contract) throw new Error(`Contract ${contractID} is not synced`)
+  return contract
+}
+
+export async function createList (title: string): Promise<ContractID> {
   const identityContractID = requireIdentity()
 
   const CSK = keygen(EDWARDS25519SHA512BATCH)
@@ -113,7 +126,8 @@ export async function createList (title) {
 
   // Every secret here is encrypted with the list's own CEK, so handing over
   // the CEK hands over the rest.
-  const secret = (key) => encryptedOutgoingDataWithRawKey(CEK, serializeKey(key, true))
+  const secret = (key: typeof CSK) =>
+    encryptedOutgoingDataWithRawKey(CEK, serializeKey(key, true))
 
   const message = await sbp('chelonia/out/registerContract', {
     contractName: LIST_CONTRACT_NAME,
@@ -170,8 +184,10 @@ export async function createList (title) {
 
 // The same keys into our own identity contract, so a login on another machine
 // gets them back. An invite, aimed at ourselves.
-async function shareWithSelf (identityContractID, contractID, keys) {
-  const identityState = state[identityContractID]
+async function shareWithSelf (
+  identityContractID: ContractID, contractID: ContractID, keys: ReturnType<typeof keygen>[]
+): Promise<void> {
+  const identityState = contractState(identityContractID)
   const CEKid = keyIdByName(identityState, 'cek')
   await sbp('chelonia/out/keyShare', {
     contractID: identityContractID,
@@ -193,29 +209,31 @@ async function shareWithSelf (identityContractID, contractID, keys) {
   })
 }
 
-const addToLists = (identityContractID, contractID) => sbp('chelonia/kv/update', {
+const addToLists = (identityContractID: ContractID, contractID: ContractID): Promise<unknown> =>
+  sbp('chelonia/kv/update', {
   contractID: identityContractID,
-  key: LISTS_KEY,
-  updater: addList(contractID)
-})
+    key: LISTS_KEY,
+    updater: addList(contractID)
+  })
 
 // An action, not a slot: renames are rare and the history is worth keeping.
-export const renameList = (contractID, title) => sbp('chelonia/out/actionEncrypted', {
-  action: `${LIST_CONTRACT_NAME}/rename`,
-  contractID,
-  data: { title },
-  signingKeyId: keyIdByName(contractID, 'csk'),
-  encryptionKeyId: keyIdByName(contractID, 'cek')
-})
+export const renameList = (contractID: ContractID, title: string): Promise<unknown> =>
+  sbp('chelonia/out/actionEncrypted', {
+    action: `${LIST_CONTRACT_NAME}/rename`,
+    contractID,
+    data: { title },
+    signingKeyId: keyIdByName(contractID, 'csk'),
+    encryptionKeyId: keyIdByName(contractID, 'cek')
+  })
 
 // A key that can only sign one OP_KEY_REQUEST for this list. The secret goes in
 // the URL fragment, which browsers never send. Reuses a still-valid invite.
-export async function inviteToList (contractID) {
-  const listState = state[contractID]
-  const now = sbp('chelonia/time')
+export async function inviteToList (contractID: ContractID): Promise<string> {
+  const listState = contractState(contractID)
+  const now: number = sbp('chelonia/time')
   const usable = Object.values(listState?._vm?.invites ?? {}).find((invite) =>
     invite.status === INVITE_STATUS.VALID &&
-    invite.quantity > 0 &&
+    (invite.quantity ?? 0) > 0 &&
     (invite.expires == null || invite.expires > now)
   )
   if (usable) return inviteUrl(contractID, usable.inviteSecret)
@@ -248,11 +266,11 @@ export async function inviteToList (contractID) {
   return inviteUrl(contractID, serializeKey(inviteKey, true))
 }
 
-const inviteUrl = (contractID, secret) =>
+const inviteUrl = (contractID: ContractID, secret: string): string =>
   `${window.location.origin}${window.location.pathname}#/join?` +
   new URLSearchParams({ list: contractID, secret })
 
-export function readInvite (hash = window.location.hash) {
+export function readInvite (hash: string = window.location.hash): Invite | null {
   const [route, query] = hash.replace(/^#\/?/, '').split('?')
   if (route !== 'join' || !query) return null
   const params = new URLSearchParams(query)
@@ -261,11 +279,11 @@ export function readInvite (hash = window.location.hash) {
   return contractID && secret ? { contractID, secret } : null
 }
 
-export const clearInvite = () => { window.location.hash = '#/' }
+export const clearInvite = (): void => { window.location.hash = '#/' }
 
 // Publishes the key request. Nothing is readable when this resolves: the owner
 // has to be online to answer, and the answer can land in a later session.
-export async function acceptInvite ({ contractID, secret }) {
+export async function acceptInvite ({ contractID, secret }: Invite): Promise<ContractID> {
   const identityContractID = requireIdentity()
   if (currentLists().includes(contractID)) return contractID
 
@@ -277,7 +295,7 @@ export async function acceptInvite ({ contractID, secret }) {
     // request comes from.
     await sbp('chelonia/contract/retain', [contractID])
 
-    const identityState = state[identityContractID]
+    const identityState = contractState(identityContractID)
     await sbp('chelonia/out/keyRequest', {
       originatingContractID: identityContractID,
       originatingContractName: CONTRACT_NAME,
@@ -286,7 +304,7 @@ export async function acceptInvite ({ contractID, secret }) {
       signingKeyId: keyId(inviteKey),
       innerSigningKeyId: keyIdByName(identityState, 'csk'),
       encryptionKeyId: keyIdByName(identityState, 'cek'),
-      innerEncryptionKeyId: keyIdByName(state[contractID], 'cek'),
+      innerEncryptionKeyId: keyIdByName(contractState(contractID), 'cek'),
       // Keeps the server from seeing which two contracts are being connected.
       encryptKeyRequestMetadata: true
     })

@@ -2,7 +2,7 @@
 // what is sent later and what is thrown away.
 
 import { expect, test } from '@playwright/test'
-import { addTodo, login, loginForm, signup, titles } from './helpers.mjs'
+import { addTodo, login, loginForm, signup, titles } from './helpers.ts'
 
 test('a change made while the server is unreachable is sent once it is back', async ({ page, context }) => {
   await signup(page)

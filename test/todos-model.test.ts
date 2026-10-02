@@ -10,9 +10,17 @@ import {
   setTitle,
   sortedTodos,
   todosSchema
-} from '../src/chelonia/todos-model.js'
+} from '../src/chelonia/todos-model.ts'
+import type { Todo, Todos } from '../src/types.ts'
 
-const todo = (over = {}) => ({
+// The reducers return KV_NOOP when there is nothing to write, so a case that
+// expects a value has to rule that out before reading it.
+const applied = (result: Todos | typeof KV_NOOP): Todos => {
+  assert.notEqual(result, KV_NOOP)
+  return result as Todos
+}
+
+const todo = (over: Partial<Todo> = {}): Todo => ({
   title: 'buy milk',
   completed: false,
   createdDate: '2026-08-04T10:00:00.000Z',
@@ -26,7 +34,7 @@ test('schema accepts a well formed list', () => {
 
 test('schema drops unknown fields', () => {
   const parsed = todosSchema.parse({ a: { ...todo(), colour: 'red' } })
-  assert.deepEqual(Object.keys(parsed.a), ['title', 'completed', 'createdDate'])
+  assert.deepEqual(Object.keys(parsed.a ?? {}), ['title', 'completed', 'createdDate'])
 })
 
 test('schema rejects values Chelonia reserves or cannot use', () => {
@@ -39,9 +47,9 @@ test('schema rejects values Chelonia reserves or cannot use', () => {
 
 test('addTodo does not touch the previous value', () => {
   const prev = Object.freeze({ a: todo() })
-  const next = addTodo({ id: 'b', title: 'walk', createdDate: '2026-08-04T11:00:00.000Z' })(prev)
+  const next = applied(addTodo({ id: 'b', title: 'walk', createdDate: '2026-08-04T11:00:00.000Z' })(prev))
   assert.deepEqual(Object.keys(next), ['a', 'b'])
-  assert.equal(next.b.completed, false)
+  assert.equal(next.b?.completed, false)
   assert.deepEqual(prev, { a: todo() })
 })
 
@@ -57,11 +65,11 @@ test('reducers abort when there is nothing to write', () => {
 
 test('reducers apply the change they are asked for', () => {
   const prev = { a: todo(), b: todo({ completed: true }) }
-  assert.equal(setCompleted('a', true)(prev).a.completed, true)
-  assert.equal(setTitle('a', 'walk')(prev).a.title, 'walk')
-  assert.deepEqual(Object.keys(removeTodo('a')(prev)), ['b'])
-  assert.deepEqual(Object.keys(removeCompleted()(prev)), ['a'])
-  assert.equal(Object.values(setAllCompleted(true)(prev)).every((t) => t.completed), true)
+  assert.equal(applied(setCompleted('a', true)(prev)).a?.completed, true)
+  assert.equal(applied(setTitle('a', 'walk')(prev)).a?.title, 'walk')
+  assert.deepEqual(Object.keys(applied(removeTodo('a')(prev))), ['b'])
+  assert.deepEqual(Object.keys(applied(removeCompleted()(prev))), ['a'])
+  assert.equal(Object.values(applied(setAllCompleted(true)(prev))).every((t) => t.completed), true)
 })
 
 // Chelonia re-runs a reducer against the server's copy on a conflict.
