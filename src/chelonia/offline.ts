@@ -34,7 +34,6 @@ let isOurWrite: (contractID: ContractID) => boolean = () => false
 const queuedActions = (): QueuedAction[] => sbp('chelonia.persistentActions/status')
 
 export function setupOfflineQueue (): void {
-  ensureRandomUUID()
   keepQueueInLocalStorage()
   sbp('chelonia.persistentActions/configure', {
     databaseKey: QUEUE_KEY,
@@ -63,24 +62,6 @@ export function setupOfflineQueue (): void {
     forget({ id })
   })
 }
-
-// TODO: BEGIN REMOVEME (okTurtles/libcheloniajs#100)
-// PersistentAction ids come from crypto.randomUUID, which browsers only
-// provide on https and localhost, so the first queued write throws when the
-// demo is opened over the LAN. The lib does this itself now, so this goes with
-// the next release.
-function ensureRandomUUID (): void {
-  if (typeof crypto.randomUUID === 'function') return
-  ;(crypto as { randomUUID: () => `${string}-${string}-${string}-${string}-${string}` }).randomUUID = () => {
-    const bytes = crypto.getRandomValues(new Uint8Array(16))
-    bytes[6] = (bytes[6]! & 0x0f) | 0x40
-    bytes[8] = (bytes[8]! & 0x3f) | 0x80
-    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
-    return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)]
-      .join('-') as `${string}-${string}-${string}-${string}-${string}`
-  }
-}
-// TODO: END REMOVEME (okTurtles/libcheloniajs#100)
 
 // chelonia.db is an in-memory map in this app, and the queue has to outlive a
 // reload, so this one key goes to localStorage instead.

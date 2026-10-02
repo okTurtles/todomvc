@@ -30,6 +30,7 @@ import {
   keygen,
   serializeKey
 } from '@chelonia/crypto'
+import { ChelErrorUnexpectedHttpResponseCode } from '@chelonia/lib/errors'
 import type { ChelContractState } from '@chelonia/lib/types'
 import { API_URL, CONTRACT_NAME } from './config.ts'
 import { AuthError } from './errors.ts'
@@ -169,16 +170,21 @@ async function retrieveSalt (identityContractID: ContractID, password: string): 
   return contractSalt
 }
 
-// TODO: BEGIN REMOVEME (okTurtles/libcheloniajs#90)
-// Replaced by `chelonia/out/nameToContractID` once a @chelonia/lib release has
-// it. The call in login() changes with it.
-async function lookupUsername (username: string): Promise<string | null> {
-  const response = await send(`/name/${encodeURIComponent(username)}`)
-  if (response.status === 404) return null
-  if (!response.ok) throw new AuthError(`Username lookup failed: ${response.status}`)
-  return response.text()
+// The lookup is @chelonia/lib's, and it answers null for a name nobody has.
+// What stays here is telling a request that never got an answer apart from
+// one the server turned down, the same way `send` does.
+async function lookupUsername (username: string): Promise<ContractID | null> {
+  try {
+    return await sbp('chelonia/out/nameToContractID', username)
+  } catch (e) {
+    if (e instanceof TypeError) {
+      throw new AuthError('Could not reach the server. Check your connection.', {
+        cause: e, exact: true
+      })
+    }
+    throw new AuthError('Username lookup failed.', { cause: e })
+  }
 }
-// TODO: END REMOVEME (okTurtles/libcheloniajs#90)
 
 export async function signup ({ username, password }: Credentials): Promise<ContractID> {
   assertUsername(username)
@@ -284,13 +290,15 @@ export async function signup ({ username, password }: Credentials): Promise<Cont
       }
     })
   } catch (e) {
-    // TODO: BEGIN REMOVEME (okTurtles/libcheloniajs#94)
-    // No way to tell the user why yet. chel sends error bodies as plain text
-    // and publishEvent does `(await r.json()).message`, so the parse throws and
-    // the status is lost: a disabled signup and a rate limit both arrive here
-    // as a JSON SyntaxError. Once a release carries the status on `cause`,
-    // 403 and 429 get their own messages here.
-    // TODO: END REMOVEME (okTurtles/libcheloniajs#94)
+    // The publish error carries the HTTP status on `cause`.
+    if (e instanceof ChelErrorUnexpectedHttpResponseCode) {
+      if (e.cause === 403) throw new AuthError('Signups are disabled on this server.')
+      // Someone took the name after the check in registerSalt.
+      if (e.cause === 409) throw new AuthError('That username is already taken.')
+      if (e.cause === 429) {
+        throw new AuthError('Too many signups from this network. Try again in a while.')
+      }
+    }
     throw new AuthError('Could not create the account.', { cause: e })
   } finally {
     sbp('chelonia/clearTransientSecretKeys', [keyId(IPK), keyId(IEK)])
