@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import type { PropType } from 'vue'
 import { currentUsername, logout, pendingWrites, state } from '../chelonia/index.ts'
 import { currentLists, listIsPending, readInvite } from '../chelonia/lists.ts'
 import type { ContractID, Lists } from '../types.ts'
@@ -9,7 +10,9 @@ import JoinView from './JoinView.vue'
 import ListsBar from './ListsBar.vue'
 import TodoApp from './TodoApp.vue'
 
-const props = defineProps<{ bootError?: Error | null }>()
+const props = defineProps({
+  bootError: { type: Error as PropType<Error | null>, default: null }
+})
 
 const loggedIn = computed(() => !props.bootError && !!state.loggedIn)
 const username = computed(() => currentUsername())

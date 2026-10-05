@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { AuthError, changePassword, deleteAccount } from '../chelonia/index.ts'
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits(['close'])
 
 const oldPassword = ref('')
 const newPassword = ref('')

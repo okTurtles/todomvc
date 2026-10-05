@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import type { PropType } from 'vue'
 import { acceptInvite, clearInvite } from '../chelonia/lists.ts'
 import type { ContractID, Invite } from '../types.ts'
 
-const props = defineProps<{ invite: Invite }>()
-const emit = defineEmits<{ done: [contractID: ContractID | null] }>()
+const props = defineProps({
+  invite: { type: Object as PropType<Invite>, required: true }
+})
+const emit = defineEmits(['done'])
 
 const busy = ref(false)
 const error = ref('')

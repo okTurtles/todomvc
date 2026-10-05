@@ -14,9 +14,11 @@ import {
 import { connection } from '../chelonia/connection.ts'
 import { rejectedWriteMessage } from '../chelonia/offline.ts'
 import { MAX_TITLE_LENGTH, sortedTodos } from '../chelonia/todos-model.ts'
-import type { ContractID, SortedTodo } from '../types.ts'
+import type { SortedTodo } from '../types.ts'
 
-const props = defineProps<{ listId: ContractID }>()
+const props = defineProps({
+  listId: { type: String, required: true }
+})
 
 const FILTERS = {
   all: () => true,

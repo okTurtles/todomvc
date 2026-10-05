@@ -5,11 +5,11 @@ import './style.css'
 
 // The app mounts either way, but it has to know the difference. Without this,
 // a saved session would render the last known todos as though they were live.
-let bootError: Error | null = null
+let bootError: unknown = null
 
 startChelonia()
   .catch((e: unknown) => {
-    bootError = e as Error
+    bootError = e
     console.error('[todomvc] could not start Chelonia', e)
   })
   .finally(() => {

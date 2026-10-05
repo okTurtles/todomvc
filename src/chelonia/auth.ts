@@ -508,8 +508,8 @@ export async function deleteAccount ({ password }: { password: string }): Promis
 // there is one copy of it.
 export function currentUsername (): string | undefined {
   const identityContractID = state.loggedIn?.identityContractID
-  if (!identityContractID) return undefined
-  return (state[identityContractID] as IdentityState | undefined)?.attributes?.username
+  return identityContractID &&
+    (state[identityContractID] as IdentityState | undefined)?.attributes?.username
 }
 
 export async function logout (): Promise<void> {

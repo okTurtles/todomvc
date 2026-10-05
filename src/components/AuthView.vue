@@ -2,9 +2,11 @@
 import { ref } from 'vue'
 import { AuthError, login, signup } from '../chelonia/index.ts'
 
-// `invited` means we arrived on an invite link, so the form says what the
-// account is for before asking for one.
-withDefaults(defineProps<{ invited?: boolean }>(), { invited: false })
+defineProps({
+  // Arrived on an invite link, so say what the account is for before asking
+  // for one.
+  invited: { type: Boolean, default: false }
+})
 
 const mode = ref<'login' | 'signup'>('login')
 const username = ref('')

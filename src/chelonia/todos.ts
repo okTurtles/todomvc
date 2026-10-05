@@ -22,10 +22,12 @@ const TODOS_KEY = 'todos'
 const NO_TODOS: Todos = Object.freeze({})
 
 // Reducers by name, because a queued write is stored as JSON and cannot carry
-// a function.
-const REDUCERS = {
+// a function. Its arguments come back from that JSON too, so their types can't
+// be checked here.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const REDUCERS: Record<string, (...args: any[]) => Reducer<Todos>> = {
   addTodo, setCompleted, setTitle, removeTodo, setAllCompleted, removeCompleted
-} as Record<string, (...args: never[]) => Reducer<Todos>>
+}
 
 // One declaration covers the first fetch, the pubsub subscription, the local
 // mirror, schema validation and the conflict retries.
@@ -49,16 +51,15 @@ export function defineTodosSlot (): void {
   })
 
   sbp('sbp/selectors/register', {
-    'todomvc/todos/write': (contractID: ContractID, op: string, ...args: never[]) => {
+    'todomvc/todos/write': (contractID: ContractID, op: string, ...args: unknown[]) => {
       // A queued write comes back from JSON, so the name is only as good as
       // what was stored. Throwing something other than a TypeError keeps this
       // out of the offline queue.
-      const reducer = REDUCERS[op]
-      if (!reducer) throw new Error(`Unknown todo write: ${op}`)
+      if (!REDUCERS[op]) throw new Error(`Unknown todo write: ${op}`)
       return sbp('chelonia/kv/update', {
         contractID,
         key: TODOS_KEY,
-        updater: reducer(...args)
+        updater: REDUCERS[op](...args)
       })
     }
   })
@@ -90,7 +91,7 @@ export function currentTodos (contractID: ContractID | null): Todos {
       // entry read back from storage would take the whole list down.
       const reducer = REDUCERS[w.op]
       if (!reducer) return todos
-      const next = reducer(...w.args as never[])(todos)
+      const next = reducer(...w.args)(todos)
       return next === KV_NOOP ? todos : next as Todos
     }, saved)
 }

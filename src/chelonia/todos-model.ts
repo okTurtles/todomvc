@@ -41,22 +41,20 @@ export const todosSchema = {
 // handling here. KV_NOOP cancels the write.
 
 export const addTodo = (
-  { id, title, createdDate }: SortedTodo | { id: string, title: string, createdDate: string }
+  { id, title, createdDate }: { id: string, title: string, createdDate: string }
 ): Reducer<Todos> => (prev) => ({
   ...prev,
   [id]: { title, completed: false, createdDate }
 })
 
 export const setCompleted = (id: string, completed: boolean): Reducer<Todos> => (prev) => {
-  const todo = prev[id]
-  if (!todo || todo.completed === completed) return KV_NOOP
-  return { ...prev, [id]: { ...todo, completed } }
+  if (!prev[id] || prev[id].completed === completed) return KV_NOOP
+  return { ...prev, [id]: { ...prev[id], completed } }
 }
 
 export const setTitle = (id: string, title: string): Reducer<Todos> => (prev) => {
-  const todo = prev[id]
-  if (!todo || todo.title === title) return KV_NOOP
-  return { ...prev, [id]: { ...todo, title } }
+  if (!prev[id] || prev[id].title === title) return KV_NOOP
+  return { ...prev, [id]: { ...prev[id], title } }
 }
 
 export const removeTodo = (id: string): Reducer<Todos> => (prev) => {
@@ -66,10 +64,10 @@ export const removeTodo = (id: string): Reducer<Todos> => (prev) => {
 }
 
 export const setAllCompleted = (completed: boolean): Reducer<Todos> => (prev) => {
-  const changing = Object.entries(prev).filter(([, todo]) => todo.completed !== completed)
-  if (changing.length === 0) return KV_NOOP
+  const ids = Object.keys(prev).filter((id) => prev[id]!.completed !== completed)
+  if (ids.length === 0) return KV_NOOP
   const next = { ...prev }
-  for (const [id, todo] of changing) next[id] = { ...todo, completed }
+  for (const id of ids) next[id] = { ...next[id]!, completed }
   return next
 }
 

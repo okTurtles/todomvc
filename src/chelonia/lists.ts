@@ -211,7 +211,7 @@ async function shareWithSelf (
 
 const addToLists = (identityContractID: ContractID, contractID: ContractID): Promise<unknown> =>
   sbp('chelonia/kv/update', {
-  contractID: identityContractID,
+    contractID: identityContractID,
     key: LISTS_KEY,
     updater: addList(contractID)
   })

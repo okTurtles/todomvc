@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
+import type { PropType } from 'vue'
 import { createList, inviteToList, listTitle, renameList } from '../chelonia/lists.ts'
 import { connection } from '../chelonia/connection.ts'
 import { MAX_TITLE_LENGTH } from '../chelonia/todos-model.ts'
 import type { ContractID, Lists } from '../types.ts'
 
-const props = withDefaults(defineProps<{
-  lists: Lists
-  modelValue?: ContractID | null
+const props = defineProps({
+  lists: { type: Array as PropType<Lists>, required: true },
+  modelValue: { type: String as PropType<ContractID | null>, default: null },
   // Owned by App, which also renders the waiting message.
-  pending?: boolean
-}>(), { modelValue: null, pending: false })
-const emit = defineEmits<{ 'update:modelValue': [contractID: ContractID] }>()
+  pending: { type: Boolean, default: false }
+})
+const emit = defineEmits(['update:modelValue'])
 
 const newTitle = ref('')
 const editing = ref(false)
@@ -45,17 +46,19 @@ async function add (): Promise<void> {
   if (contractID) emit('update:modelValue', contractID)
 }
 
+// Sharing and renaming only happen on the selected list, so modelValue is
+// always set below. A list that is not pending has a title.
+
 async function share (): Promise<void> {
   link.value = ''
-  if (!props.modelValue) return
-  const url = await run(() => inviteToList(props.modelValue as ContractID))
+  const url = await run(() => inviteToList(props.modelValue!))
   if (url) link.value = url
 }
 
 function startEditing (): void {
   if (readOnly.value || props.pending) return
   editing.value = true
-  editTitle.value = props.modelValue ? listTitle(props.modelValue) ?? '' : ''
+  editTitle.value = listTitle(props.modelValue!)!
   nextTick(() => editInput.value?.select())
 }
 
@@ -63,9 +66,8 @@ function finishEditing (): void {
   const title = editTitle.value.trim()
   if (!editing.value || readOnly.value) return
   editing.value = false
-  const contractID = props.modelValue
-  if (contractID && title && title !== listTitle(contractID)) {
-    run(() => renameList(contractID, title))
+  if (title && title !== listTitle(props.modelValue!)) {
+    run(() => renameList(props.modelValue!, title))
   }
 }
 </script>
