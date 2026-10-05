@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { KV_NOOP } from '@chelonia/lib/kv-constants'
-import { addList, listsSchema } from '../src/chelonia/lists-model.js'
+import { addList, listsSchema } from '../src/chelonia/lists-model.ts'
+import type { Lists } from '../src/types.ts'
+
+// addList returns KV_NOOP when the list is already there.
+const applied = (result: Lists | typeof KV_NOOP): Lists => {
+  assert.notEqual(result, KV_NOOP)
+  return result as Lists
+}
 
 const ID = 'zLDXeQ2AgfCuHJdjXoq2jX4XBRSWWzgFkM6WryzsQe4pBzd9qk85Pp54'
 const OTHER = 'zLDXeQ2AgfCuH7oQQb5fuzuGjnBiPP6Ff35WAwEGifjBQ1dmg3wSK9ck'
@@ -37,5 +44,5 @@ test('adding a list already there is cancelled', () => {
 test('two joins of the same list converge on one entry', () => {
   const add = addList(ID)
   assert.deepEqual(add([]), [ID])
-  assert.equal(add(add([])), KV_NOOP)
+  assert.equal(add(applied(add([]))), KV_NOOP)
 })

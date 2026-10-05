@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   clearCompletedTodos,
@@ -10,10 +10,11 @@ import {
   renameTodo,
   setTodoCompleted,
   todosStatus
-} from '../chelonia/todos.js'
-import { connection } from '../chelonia/connection.js'
-import { rejectedWriteMessage } from '../chelonia/offline.js'
-import { MAX_TITLE_LENGTH, sortedTodos } from '../chelonia/todos-model.js'
+} from '../chelonia/todos.ts'
+import { connection } from '../chelonia/connection.ts'
+import { rejectedWriteMessage } from '../chelonia/offline.ts'
+import { MAX_TITLE_LENGTH, sortedTodos } from '../chelonia/todos-model.ts'
+import type { SortedTodo } from '../types.ts'
 
 const props = defineProps({
   listId: { type: String, required: true }
@@ -21,16 +22,17 @@ const props = defineProps({
 
 const FILTERS = {
   all: () => true,
-  active: (todo) => !todo.completed,
-  completed: (todo) => todo.completed
+  active: (todo: SortedTodo) => !todo.completed,
+  completed: (todo: SortedTodo) => todo.completed
 }
+type Filter = keyof typeof FILTERS
 
 const newTitle = ref('')
-const newTodoInput = ref(null)
-const editingId = ref(null)
+const newTodoInput = ref<HTMLInputElement | null>(null)
+const editingId = ref<string | null>(null)
 const editTitle = ref('')
-const editInput = ref(null)
-const filter = ref(readFilter())
+const editInput = ref<HTMLInputElement[] | null>(null)
+const filter = ref<Filter>(readFilter())
 const error = ref('')
 
 // currentTodos() reads Chelonia's KV mirror, which lives in the reactive root
@@ -50,9 +52,9 @@ const waiting = computed(() => pendingCount(props.listId))
 // A queued write the server refused. It is gone from the list by now.
 const refused = computed(() => rejectedWriteMessage())
 
-function readFilter () {
+function readFilter (): Filter {
   const name = window.location.hash.replace(/^#\/?/, '')
-  return name in FILTERS ? name : 'all'
+  return name in FILTERS ? name as Filter : 'all'
 }
 
 const onHashChange = () => { filter.value = readFilter() }
@@ -69,7 +71,7 @@ onUnmounted(() => window.removeEventListener('hashchange', onHashChange))
 watch(() => props.listId, () => { editingId.value = null })
 
 // Writes go to the server, so any of them can fail.
-async function run (write) {
+async function run (write: () => Promise<unknown>): Promise<void> {
   error.value = ''
   try {
     await write()
@@ -79,20 +81,20 @@ async function run (write) {
   }
 }
 
-function add () {
+function add (): void {
   const title = newTitle.value.trim()
   if (!title) return
   newTitle.value = ''
   run(() => createTodo(props.listId, title))
 }
 
-function startEditing (todo) {
+function startEditing (todo: SortedTodo): void {
   editingId.value = todo.id
   editTitle.value = todo.title
   nextTick(() => editInput.value?.[0]?.focus())
 }
 
-function finishEditing () {
+function finishEditing (): void {
   const id = editingId.value
   if (id === null) return
   const title = editTitle.value.trim()

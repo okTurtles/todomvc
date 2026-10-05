@@ -2,7 +2,7 @@
 // https://github.com/tastejs/todomvc/blob/master/app-spec.md
 
 import { expect, test } from '@playwright/test'
-import { addTodo, items, signup, titles } from './helpers.mjs'
+import { addTodo, items, signup, titles } from './helpers.ts'
 
 test.beforeEach(async ({ page }) => {
   await signup(page)
