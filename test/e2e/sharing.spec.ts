@@ -2,9 +2,10 @@
 // an invite, and the key request the owner's browser has to answer.
 
 import { expect, test } from '@playwright/test'
-import { addTodo, inviteLink, items, newUsername, signup, titles } from './helpers.mjs'
+import type { Page } from '@playwright/test'
+import { addTodo, inviteLink, items, newUsername, signup, titles } from './helpers.ts'
 
-const tabs = (page) => page.locator('.list-tabs button')
+const tabs = (page: Page) => page.locator('.list-tabs button')
 
 test('a second account joins a list and both edit it', async ({ browser }) => {
   const ownerContext = await browser.newContext()

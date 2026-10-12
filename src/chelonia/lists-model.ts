@@ -1,4 +1,5 @@
 import { KV_NOOP } from '@chelonia/lib/kv-constants'
+import type { ContractID, Lists, Reducer } from '../types.ts'
 
 // The lists slot on the identity contract: which lists this account is in, in
 // the order they were added. Nothing else, because everything else about a list
@@ -6,11 +7,11 @@ import { KV_NOOP } from '@chelonia/lib/kv-constants'
 // everyone sharing it.
 
 export const listsSchema = {
-  parse (value) {
+  parse (value: unknown): Lists {
     if (!Array.isArray(value)) {
       throw new TypeError('lists must be an array of contract IDs')
     }
-    const seen = new Set()
+    const seen = new Set<string>()
     for (const contractID of value) {
       if (typeof contractID !== 'string' || contractID.length === 0) {
         throw new TypeError('a list ID must be a non-empty string')
@@ -20,9 +21,9 @@ export const listsSchema = {
       }
       seen.add(contractID)
     }
-    return [...value]
+    return [...value as Lists]
   }
 }
 
-export const addList = (contractID) => (prev) =>
+export const addList = (contractID: ContractID): Reducer<Lists> => (prev) =>
   prev.includes(contractID) ? KV_NOOP : [...prev, contractID]

@@ -13,7 +13,7 @@ import {
   openAccount,
   signup,
   titles
-} from './helpers.mjs'
+} from './helpers.ts'
 
 const NEW_PASSWORD = 'todomvc-e2e-new-password'
 

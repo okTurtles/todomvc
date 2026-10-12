@@ -1,12 +1,14 @@
-<script setup>
+<script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
-import { createList, inviteToList, listTitle, renameList } from '../chelonia/lists.js'
-import { connection } from '../chelonia/connection.js'
-import { MAX_TITLE_LENGTH } from '../chelonia/todos-model.js'
+import type { PropType } from 'vue'
+import { createList, inviteToList, listTitle, renameList } from '../chelonia/lists.ts'
+import { connection } from '../chelonia/connection.ts'
+import { MAX_TITLE_LENGTH } from '../chelonia/todos-model.ts'
+import type { ContractID, Lists } from '../types.ts'
 
 const props = defineProps({
-  lists: { type: Array, required: true },
-  modelValue: { type: String, default: null },
+  lists: { type: Array as PropType<Lists>, required: true },
+  modelValue: { type: String as PropType<ContractID | null>, default: null },
   // Owned by App, which also renders the waiting message.
   pending: { type: Boolean, default: false }
 })
@@ -15,15 +17,15 @@ const emit = defineEmits(['update:modelValue'])
 const newTitle = ref('')
 const editing = ref(false)
 const editTitle = ref('')
-const editInput = ref(null)
+const editInput = ref<HTMLInputElement | null>(null)
 const link = ref('')
 const busy = ref(false)
 const error = ref('')
 
 const readOnly = computed(() => !connection.online || busy.value)
-const titleOf = (contractID) => listTitle(contractID) ?? 'Waiting for keys'
+const titleOf = (contractID: ContractID): string => listTitle(contractID) ?? 'Waiting for keys'
 
-async function run (write) {
+async function run <T>(write: () => Promise<T>): Promise<T | undefined> {
   error.value = ''
   busy.value = true
   try {
@@ -36,7 +38,7 @@ async function run (write) {
   }
 }
 
-async function add () {
+async function add (): Promise<void> {
   const title = newTitle.value.trim()
   if (!title || readOnly.value) return
   newTitle.value = ''
@@ -44,25 +46,28 @@ async function add () {
   if (contractID) emit('update:modelValue', contractID)
 }
 
-async function share () {
+// Sharing and renaming only happen on the selected list, so modelValue is
+// always set below. A list that is not pending has a title.
+
+async function share (): Promise<void> {
   link.value = ''
-  const url = await run(() => inviteToList(props.modelValue))
+  const url = await run(() => inviteToList(props.modelValue!))
   if (url) link.value = url
 }
 
-function startEditing () {
+function startEditing (): void {
   if (readOnly.value || props.pending) return
   editing.value = true
-  editTitle.value = listTitle(props.modelValue)
+  editTitle.value = listTitle(props.modelValue!)!
   nextTick(() => editInput.value?.select())
 }
 
-function finishEditing () {
+function finishEditing (): void {
   const title = editTitle.value.trim()
   if (!editing.value || readOnly.value) return
   editing.value = false
-  if (title && title !== listTitle(props.modelValue)) {
-    run(() => renameList(props.modelValue, title))
+  if (title && title !== listTitle(props.modelValue!)) {
+    run(() => renameList(props.modelValue!, title))
   }
 }
 </script>
@@ -121,7 +126,7 @@ function finishEditing () {
           class="invite-link"
           :value="link"
           readonly
-          @focus="$event.target.select()"
+          @focus="($event.target as HTMLInputElement).select()"
         >
       </label>
       <p>

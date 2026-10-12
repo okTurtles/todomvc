@@ -9,8 +9,8 @@ import { randomUUID } from 'node:crypto'
 import { rm, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
-import { chel } from '../../scripts/chel.mjs'
-import { DASHBOARD_PORT, PORT } from './ports.mjs'
+import { chel } from '../../scripts/chel.ts'
+import { DASHBOARD_PORT, PORT } from './ports.ts'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const workDir = path.join(root, 'data/e2e')

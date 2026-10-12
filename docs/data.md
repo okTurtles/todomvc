@@ -1,6 +1,6 @@
 # The todos slot and the writes
 
-This is for someone reading `src/chelonia/todos.js` and `lists.js`. The README
+This is for someone reading `src/chelonia/todos.ts` and `lists.ts`. The README
 says what happens; this shows the code.
 
 Two slots are declared once, at startup. `lists` on the identity contract holds
@@ -50,7 +50,7 @@ so a `computed` over it reruns on all four and the list redraws by itself.
 ## Offline
 
 `chelonia/kv/update` needs the server, so while the socket is down a write goes
-into Chelonia's persistent action queue instead (`src/chelonia/offline.js`).
+into Chelonia's persistent action queue instead (`src/chelonia/offline.ts`).
 The queue stores `[selector, ...args]` as JSON, which is why writes are named
 (`'addTodo'`, `'setTitle'`, ...) and the reducer is looked up when the write
 runs. The queue lives under one localStorage key, so it survives a reload, and
@@ -65,7 +65,7 @@ would only get the same refusal.
 One case does not hold. A todo made while the server is away cannot be ticked
 off, renamed or deleted until it has landed: the change is applied to the value
 the server has, which does not have that todo in it, so it does nothing and is
-lost. `test/e2e/offline.spec.mjs` has it, marked as a known gap.
+lost. `test/e2e/offline.spec.ts` has it, marked as a known gap.
 
 Two things worth knowing about the queue:
 

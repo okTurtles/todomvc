@@ -6,21 +6,27 @@
 src/contracts/identity.js   the account contract. chel signs it, Chelonia
                             evaluates it in a sandbox, it is not bundled
 src/contracts/list.js       one todo list, with the rename action
-src/chelonia/config.js      chelonia/configure and chelonia/connect
-src/chelonia/state.js       the reactive root state, and saving it
-src/chelonia/auth.js        signup, login, logout, restore
-src/chelonia/lists.js       creating a list, inviting, joining
-src/chelonia/lists-model.js the lists schema and its one reducer, both pure
-src/chelonia/todos.js       the todos slot and the six writes
-src/chelonia/todos-model.js the schema and the reducers, both pure
-src/chelonia/offline.js     the queue for writes made while the server is away
+src/chelonia/config.ts      chelonia/configure and chelonia/connect
+src/chelonia/state.ts       the reactive root state, and saving it
+src/chelonia/auth.ts        signup, login, logout, restore
+src/chelonia/lists.ts       creating a list, inviting, joining
+src/chelonia/lists-model.ts the lists schema and its one reducer, both pure
+src/chelonia/todos.ts       the todos slot and the six writes
+src/chelonia/todos-model.ts the schema and the reducers, both pure
+src/chelonia/offline.ts     the queue for writes made while the server is away
+src/types.ts                the shapes the app passes around
 src/components/             Vue, and nothing else
-scripts/build-contracts.mjs chel manifest -> chel pin -> manifest CID
-scripts/chel.mjs            runs chel from node_modules, see below
+scripts/build-contracts.ts  chel manifest -> chel pin -> manifest CID
+scripts/chel.ts             runs chel from node_modules
 docs/data.md                the todos slot and the writes, with code
 docs/login.md               signup and login, step by step
 docs/sharing.md             how sharing works, message by message
 ```
+
+The app is TypeScript, checked with `npm run typecheck`. The two files under
+`src/contracts/` stay JavaScript on purpose: chel signs the file as it is and
+Chelonia evaluates that same text in a sandbox, so there is no build step that
+could strip types out first.
 
 Everything Chelonia touches is under `src/chelonia/`. The components import a
 few functions from it and know nothing about etags, subscriptions or conflicts.
@@ -47,15 +53,15 @@ database backend, and a `server_id` the server refuses to start without).
 on restart, so the script switches it to sqlite under `data/`.
 
 Ctrl+C stops `npm run serve` and everything under it. In a script, killing only
-the `scripts/chel.mjs` process by name leaves the server it spawned running, so
+the `scripts/chel.ts` process by name leaves the server it spawned running, so
 signal the process group or use the port: `lsof -ti:8000 | xargs kill`.
 
 After a full rebuild, restart `npm run serve`. Vite empties `dist/` and a
 server that was already running answers 404 until it is restarted.
 
-The app is built with `LIGHTWEIGHT_CLIENT=true` (see `vite.config.js`), the
-same as Group Income: the browser keeps no message log, and Chelonia reads each
-contract's HEAD from the saved state.
+Chelonia runs as a lightweight client, which is `@chelonia/lib`'s default since
+2.0.0, the same as Group Income: the browser keeps no message log, and Chelonia
+reads each contract's HEAD from the saved state.
 
 The contract version comes from `version` in `package.json`. Editing a contract
 without bumping it makes the build stop, since the app would then be built
@@ -66,45 +72,8 @@ against a manifest the accounts already on the server do not have.
 Each one is fenced in the source with `TODO: BEGIN REMOVEME (issue)` and
 `TODO: END REMOVEME (issue)`, so `grep REMOVEME` finds them all.
 
-Several of these are already fixed upstream but not published. The app pins
-`@chelonia/lib` 1.5.0 and `@chelonia/cli` 3.4.0, so a merged fix changes nothing
-here until there is a release to bump to.
-
-- `scripts/chel.mjs` and `.github/workflows/ci.yml`: the published
-  `@chelonia/cli` 3.4.0 cannot load SQLite on its own, so chel is run with
-  `DENO_SQLITE_PATH` pointing at the system library. Fixed by
-  [chel#162](https://github.com/okTurtles/chel/pull/162), tracked as
-  [chel#150](https://github.com/okTurtles/chel/issues/150). Until a release
-  ships, run chel as `node scripts/chel.mjs <args>`.
-- `src/contracts/identity.js`, `src/chelonia/config.js`,
-  `scripts/build-contracts.mjs`: the account contract has to be named
-  `gi.contracts/identity`, Group Income's name, because chel only accepts a
-  contract created without an account to bill it to under that exact name.
-  [chel#160](https://github.com/okTurtles/chel/issues/160).
-- `src/chelonia/auth.js`, `lookupUsername`: replaced by
-  `chelonia/out/nameToContractID`. Merged as
-  [libcheloniajs#95](https://github.com/okTurtles/libcheloniajs/pull/95),
-  tracked as
-  [libcheloniajs#90](https://github.com/okTurtles/libcheloniajs/issues/90).
-- `src/chelonia/auth.js`, signup error message: the publish error carries the
-  HTTP status, so signup can say why it failed. Merged as
-  [libcheloniajs#97](https://github.com/okTurtles/libcheloniajs/pull/97),
-  tracked as
-  [libcheloniajs#94](https://github.com/okTurtles/libcheloniajs/issues/94).
-- `src/chelonia/auth.js`, `USERNAME_REGEX`: a copy of chel's private
+- `src/chelonia/auth.ts`, `USERNAME_REGEX`: a copy of chel's private
   `NAME_REGEX`. Goes once chel exports the rule.
-- `src/chelonia/offline.js`, `ensureRandomUUID`: `@chelonia/lib` builds
-  persistent action ids with `crypto.randomUUID`, which browsers only provide
-  on https and localhost, so the demo breaks over the LAN. Merged as
-  [libcheloniajs#101](https://github.com/okTurtles/libcheloniajs/pull/101),
-  tracked as
-  [libcheloniajs#100](https://github.com/okTurtles/libcheloniajs/issues/100).
-- `src/chelonia/auth.js`, the key list in `signup`: gets shorter once
+- `src/chelonia/auth.ts`, the key list in `signup`: gets shorter once
   [libcheloniajs#91](https://github.com/okTurtles/libcheloniajs/issues/91)
   lands. Not a removal, so it is a plain TODO.
-
-## Accounts from before lists existed
-
-Their todos were a slot on the identity contract and this version does not look
-there. The account, the username and the password still work; the old todos do
-not appear. There is no migration, since nothing has shipped.

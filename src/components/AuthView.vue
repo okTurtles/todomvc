@@ -1,6 +1,6 @@
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
-import { AuthError, login, signup } from '../chelonia/index.js'
+import { AuthError, login, signup } from '../chelonia/index.ts'
 
 defineProps({
   // Arrived on an invite link, so say what the account is for before asking
@@ -8,13 +8,13 @@ defineProps({
   invited: { type: Boolean, default: false }
 })
 
-const mode = ref('login')
+const mode = ref<'login' | 'signup'>('login')
 const username = ref('')
 const password = ref('')
 const busy = ref(false)
 const error = ref('')
 
-async function submit () {
+async function submit (): Promise<void> {
   error.value = ''
   busy.value = true
   try {

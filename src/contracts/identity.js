@@ -6,26 +6,19 @@
 // It is almost empty on purpose. Todos live in a KV slot, not in actions. What
 // the contract provides is what KV cannot: an object on the server that owns
 // the keys and gives `/kv/:contractID/:key` its scope.
-//
-// TODO: BEGIN REMOVEME (okTurtles/chel#160)
-// The name has to be `gi.contracts/identity`, here and on the actions below.
-// chel's POST /event only accepts a contract created without an account to
-// bill it to when the manifest name is that, and only registers a username for
-// a contract of that type. See src/serve/routes.ts in okTurtles/chel.
-// TODO: END REMOVEME (okTurtles/chel#160)
 
 // Encrypted data on the wire is a `[keyId, ciphertext]` pair. The check is the
 // library's own: Chelonia gives the sandbox a `require` that resolves the
 // modules the app lists in `contracts.defaults.modules`, so there is no second
-// copy of the rule here. See src/chelonia/config.js.
+// copy of the rule here. See src/chelonia/config.ts.
 const { isRawEncryptedData } = require('@chelonia/lib/encryptedData')
 
 sbp('chelonia/defineContract', {
-  name: 'gi.contracts/identity',
+  name: 'todomvc/identity',
   actions: {
     // The initial action, published with OP_CONTRACT by
     // chelonia/out/registerContract. Its name is the contract name.
-    'gi.contracts/identity': {
+    'todomvc/identity': {
       validate (data) {
         if (typeof data?.attributes?.username !== 'string') {
           throw new TypeError('attributes.username must be a string')
@@ -43,7 +36,7 @@ sbp('chelonia/defineContract', {
     },
     // The token is encrypted with a password-derived key, so a password
     // change publishes it again under the new one.
-    'gi.contracts/identity/setDeletionToken': {
+    'todomvc/identity/setDeletionToken': {
       validate (data) {
         if (!isRawEncryptedData(data?.encryptedDeletionToken)) {
           throw new TypeError('encryptedDeletionToken must be encrypted data')

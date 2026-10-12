@@ -1,10 +1,10 @@
 import { defineConfig } from '@playwright/test'
 import process from 'node:process'
-import { PORT } from './test/e2e/ports.mjs'
+import { PORT } from './test/e2e/ports.ts'
 
 export default defineConfig({
   testDir: './test/e2e',
-  testMatch: '*.spec.mjs',
+  testMatch: '*.spec.ts',
   // Signup derives two keys with scrypt and every todo is a round trip to the
   // server, so the default 30s is not enough on a cold run.
   timeout: 90_000,
@@ -22,7 +22,7 @@ export default defineConfig({
   webServer: {
     // The app has to be rebuilt so the manifest CID it was built with matches
     // the contract the server uploads.
-    command: 'npm run build && node test/e2e/server.mjs',
+    command: 'npm run build && node test/e2e/server.ts',
     url: `http://127.0.0.1:${PORT}/app/`,
     timeout: 180_000,
     reuseExistingServer: false
