@@ -1,5 +1,5 @@
 import { KV_NOOP } from '@chelonia/lib/kv-constants'
-import type { Reducer, SortedTodo, Todo, Todos } from '../types.ts'
+import type { NewTodo, Reducer, SortedTodo, Todo, Todos } from '../types.ts'
 
 export const MAX_TITLE_LENGTH = 512
 
@@ -40,9 +40,7 @@ export const todosSchema = {
 // when someone else wrote first, so two tabs converge without any conflict
 // handling here. KV_NOOP cancels the write.
 
-export const addTodo = (
-  { id, title, createdDate }: { id: string, title: string, createdDate: string }
-): Reducer<Todos> => (prev) => ({
+export const addTodo = ({ id, title, createdDate }: NewTodo): Reducer<Todos> => (prev) => ({
   ...prev,
   [id]: { title, completed: false, createdDate }
 })
@@ -75,6 +73,33 @@ export const removeCompleted = (): Reducer<Todos> => (prev) => {
   const entries = Object.entries(prev).filter(([, todo]) => !todo.completed)
   if (entries.length === Object.keys(prev).length) return KV_NOOP
   return Object.fromEntries(entries)
+}
+
+// A write waiting in the offline queue is stored as JSON, so it comes back as a
+// name and plain values. These check the values before the reducer runs, and a
+// write that doesn't pass gives null instead of a reducer.
+const isString = (x: unknown): x is string => typeof x === 'string'
+const isBoolean = (x: unknown): x is boolean => typeof x === 'boolean'
+const isNewTodo = (x: unknown): x is NewTodo => {
+  if (typeof x !== 'object' || x === null) return false
+  const { id, title, createdDate } = x as Partial<NewTodo>
+  return isString(id) && isString(title) && isString(createdDate)
+}
+
+const WRITES: Record<string, (args: unknown[]) => Reducer<Todos> | null> = {
+  addTodo: ([todo]) => isNewTodo(todo) ? addTodo(todo) : null,
+  setCompleted: ([id, completed]) =>
+    isString(id) && isBoolean(completed) ? setCompleted(id, completed) : null,
+  setTitle: ([id, title]) => isString(id) && isString(title) ? setTitle(id, title) : null,
+  removeTodo: ([id]) => isString(id) ? removeTodo(id) : null,
+  setAllCompleted: ([completed]) => isBoolean(completed) ? setAllCompleted(completed) : null,
+  removeCompleted: () => removeCompleted()
+}
+
+export const storedWrite = (op: string, args: unknown[]): Reducer<Todos> | null => {
+  // hasOwn, so a name like 'toString' isn't found on the object's prototype
+  const check = Object.hasOwn(WRITES, op) ? WRITES[op] : undefined
+  return check ? check(args) : null
 }
 
 // The slot value is a plain object, so order is not something to rely on.

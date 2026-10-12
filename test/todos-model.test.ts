@@ -9,6 +9,7 @@ import {
   setCompleted,
   setTitle,
   sortedTodos,
+  storedWrite,
   todosSchema
 } from '../src/chelonia/todos-model.ts'
 import type { Todo, Todos } from '../src/types.ts'
@@ -85,4 +86,36 @@ test('sortedTodos orders by creation date, then id', () => {
     a: todo({ createdDate: '2026-08-04T10:00:00.000Z' })
   }
   assert.deepEqual(sortedTodos(value).map((t) => t.id), ['a', 'b'])
+})
+
+test('storedWrite rebuilds a queued write whose values check out', () => {
+  const prev = { a: todo() }
+  const added = storedWrite('addTodo', [{ id: 'b', title: 'walk', createdDate: '2026-08-04T11:00:00.000Z' }])
+  assert.deepEqual(Object.keys(applied(added!(prev))), ['a', 'b'])
+  assert.equal(applied(storedWrite('setCompleted', ['a', true])!(prev)).a?.completed, true)
+  assert.equal(applied(storedWrite('setTitle', ['a', 'walk'])!(prev)).a?.title, 'walk')
+  assert.deepEqual(applied(storedWrite('removeTodo', ['a'])!(prev)), {})
+  assert.equal(applied(storedWrite('setAllCompleted', [true])!(prev)).a?.completed, true)
+  assert.deepEqual(applied(storedWrite('removeCompleted', [])!({ a: todo({ completed: true }) })), {})
+})
+
+test('storedWrite refuses a queued write that does not check out', () => {
+  const refused: [string, unknown[]][] = [
+    ['addTodo', [{ id: 'b', title: 'walk' }]],
+    ['addTodo', ['walk']],
+    ['addTodo', [null]],
+    ['setCompleted', ['a', 'yes']],
+    ['setCompleted', [1, true]],
+    ['setTitle', ['a']],
+    ['removeTodo', []],
+    ['setAllCompleted', ['true']],
+    // Not writes at all, including names every object has
+    ['dropTable', []],
+    ['toString', []],
+    ['constructor', []],
+    ['__proto__', []]
+  ]
+  for (const [op, args] of refused) {
+    assert.equal(storedWrite(op, args), null, `${op}(${JSON.stringify(args)})`)
+  }
 })

@@ -19,6 +19,9 @@ export type Todos = Record<string, Todo>
 // A todo with its key folded in, which is what the list renders.
 export type SortedTodo = Todo & { id: string }
 
+// What a new todo is made from. It always starts out not completed.
+export type NewTodo = Omit<SortedTodo, 'completed'>
+
 // The `lists` slot value on the identity contract. Readonly because callers
 // only ever read it; the reducer builds a new array.
 export type Lists = readonly ContractID[]

@@ -7,27 +7,11 @@ import { connection } from './connection.ts'
 import { currentLists } from './lists.ts'
 import { pendingWrites, queueWrite } from './offline.ts'
 import { state } from './state.ts'
-import {
-  addTodo,
-  removeCompleted,
-  removeTodo,
-  setAllCompleted,
-  setCompleted,
-  setTitle,
-  todosSchema
-} from './todos-model.ts'
-import type { ContractID, Reducer, Todos } from '../types.ts'
+import { storedWrite, todosSchema } from './todos-model.ts'
+import type { ContractID, Todos } from '../types.ts'
 
 const TODOS_KEY = 'todos'
 const NO_TODOS: Todos = Object.freeze({})
-
-// Reducers by name, because a queued write is stored as JSON and cannot carry
-// a function. Its arguments come back from that JSON too, so their types can't
-// be checked here.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const REDUCERS: Record<string, (...args: any[]) => Reducer<Todos>> = {
-  addTodo, setCompleted, setTitle, removeTodo, setAllCompleted, removeCompleted
-}
 
 // One declaration covers the first fetch, the pubsub subscription, the local
 // mirror, schema validation and the conflict retries.
@@ -52,14 +36,15 @@ export function defineTodosSlot (): void {
 
   sbp('sbp/selectors/register', {
     'todomvc/todos/write': (contractID: ContractID, op: string, ...args: unknown[]) => {
-      // A queued write comes back from JSON, so the name is only as good as
-      // what was stored. Throwing something other than a TypeError keeps this
+      // A queued write comes back from JSON, so it is only as good as what
+      // was stored. Throwing something other than a TypeError keeps a bad one
       // out of the offline queue.
-      if (!REDUCERS[op]) throw new Error(`Unknown todo write: ${op}`)
+      const updater = storedWrite(op, args)
+      if (!updater) throw new Error(`Invalid todo write: ${op}`)
       return sbp('chelonia/kv/update', {
         contractID,
         key: TODOS_KEY,
-        updater: REDUCERS[op](...args)
+        updater
       })
     }
   })
@@ -89,9 +74,9 @@ export function currentTodos (contractID: ContractID | null): Todos {
     .reduce<Todos>((todos, w) => {
       // Skipped rather than thrown: this runs inside a computed, and one bad
       // entry read back from storage would take the whole list down.
-      const reducer = REDUCERS[w.op]
+      const reducer = storedWrite(w.op, w.args)
       if (!reducer) return todos
-      const next = reducer(...w.args)(todos)
+      const next = reducer(todos)
       return next === KV_NOOP ? todos : next as Todos
     }, saved)
 }
