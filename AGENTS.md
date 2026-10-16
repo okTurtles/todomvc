@@ -14,6 +14,8 @@ src/chelonia/lists-model.ts the lists schema and its one reducer, both pure
 src/chelonia/todos.ts       the todos slot and the six writes
 src/chelonia/todos-model.ts the schema and the reducers, both pure
 src/chelonia/offline.ts     the queue for writes made while the server is away
+src/chelonia/requests.ts    every request the app sends, kept for the explainer
+src/explainer.ts            the steps of the How it works panel and their evidence
 src/types.ts                the shapes the app passes around
 src/components/             Vue, and nothing else
 scripts/build-contracts.ts  chel manifest -> chel pin -> manifest CID
@@ -21,6 +23,8 @@ scripts/chel.ts             runs chel from node_modules
 docs/data.md                the todos slot and the writes, with code
 docs/login.md               signup and login, step by step
 docs/sharing.md             how sharing works, message by message
+docs/hosting.md             running the public demo
+deploy/                     its deploy script, service and Caddyfile
 ```
 
 The app is TypeScript, checked with `npm run typecheck`. The two files under

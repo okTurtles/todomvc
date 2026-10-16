@@ -26,6 +26,10 @@ the app and starts the server. `npm test` runs the unit tests and
 scripts, and the files the first run creates, are listed in
 [AGENTS.md](AGENTS.md).
 
+The **How it works** panel under the app explains what Chelonia does at each
+step, using the requests that really leave the browser. **turn off** hides it.
+To run the app where others can try it, see [docs/hosting.md](docs/hosting.md).
+
 ## What to try
 
 1. Create an account. The keys are generated in the browser; the server only

@@ -1,0 +1,43 @@
+name: Deploy demo
+
+# Updates the public demo once CI has passed on main. Does nothing until the
+# DEMO_* secrets are set; docs/hosting.md says what goes in them.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+# Nothing is checked out here: the server builds the commit itself, so the
+# contract signing key never has to leave it.
+permissions: {}
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Pushes to main only, never a pull request, and only when CI passed
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run deploy/deploy.sh on the server
+        # Passed as environment variables, not pasted into the script, so a
+        # value can't change what the script does.
+        env:
+          HOST: ${{ secrets.DEMO_HOST }}
+          SSH_USER: ${{ secrets.DEMO_USER }}
+          SSH_KEY: ${{ secrets.DEMO_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEMO_KNOWN_HOSTS }}
+          COMMIT: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ -z "$HOST" ]; then
+            echo "DEMO_HOST is not set, so there is nowhere to deploy."
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/demo
+          chmod 600 ~/.ssh/demo
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/demo "$SSH_USER@$HOST" "todomvc/deploy/deploy.sh $COMMIT"
