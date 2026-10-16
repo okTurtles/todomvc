@@ -5,6 +5,7 @@ import { createList, inviteToList, listTitle, renameList } from '../chelonia/lis
 import { connection } from '../chelonia/connection.ts'
 import { MAX_TITLE_LENGTH } from '../chelonia/todos-model.ts'
 import type { ContractID, Lists } from '../types.ts'
+import { explainShare, tracked } from '../explainer.ts'
 
 const props = defineProps({
   lists: { type: Array as PropType<Lists>, required: true },
@@ -51,8 +52,11 @@ async function add (): Promise<void> {
 
 async function share (): Promise<void> {
   link.value = ''
-  const url = await run(() => inviteToList(props.modelValue!))
-  if (url) link.value = url
+  const result = await run(() => tracked(() => inviteToList(props.modelValue!)))
+  if (!result) return
+  const [url, requests] = result
+  link.value = url
+  explainShare(url, requests)
 }
 
 function startEditing (): void {

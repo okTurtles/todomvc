@@ -38,6 +38,7 @@ import {
   createList, currentLists, keyIdByName, loadLists, requireIdentity, retainOrSync
 } from './lists.ts'
 import { dropPendingWrites, loadOfflineQueue } from './offline.ts'
+import { sendRequest } from './requests.ts'
 import { clearSavedState, persistState, state } from './state.ts'
 import type { ContractID } from '../types.ts'
 
@@ -95,7 +96,7 @@ function assertUsername (username: string): void {
 // 500, means the server did answer.
 async function send (path: string, init?: RequestInit): Promise<Response> {
   try {
-    return await fetch(`${API_URL}${path}`, init)
+    return await sendRequest(`${API_URL}${path}`, init)
   } catch (e) {
     throw new AuthError('Could not reach the server. Check your connection.', {
       cause: e, exact: true
