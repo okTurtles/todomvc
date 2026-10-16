@@ -29,7 +29,7 @@ import type { ContractID, Invite, Lists } from '../types.ts'
 
 const LISTS_KEY = 'lists'
 const NO_LISTS: Lists = Object.freeze([])
-const INVITE_LIFETIME = 7 * 24 * 60 * 60 * 1000
+export const INVITE_LIFETIME = 7 * 24 * 60 * 60 * 1000
 
 export function defineListsSlot (): void {
   sbp('chelonia/kv/defineSlot', {
