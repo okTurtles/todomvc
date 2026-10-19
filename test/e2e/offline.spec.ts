@@ -143,6 +143,8 @@ test('a queued write the server refuses is dropped and reported', async ({ page,
   await expect(titles(page)).toHaveText([])
   await expect(page.locator('.todo-status')).toBeHidden()
   await expect(page.locator('.todo-notice')).toBeHidden()
+  // The How it works panel must not say it went out
+  await expect(page.locator('.explainer-card')).toBeHidden()
 
   // The notice is about a write that no longer exists, so it must not come
   // back from the saved state on the next visit.

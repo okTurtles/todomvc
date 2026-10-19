@@ -37,11 +37,15 @@ server over SSH and runs `deploy/deploy.sh` with the commit. The script checks
 the commit out, builds it on the server and restarts the service. Building
 there means the contract signing key never leaves the server.
 
-It never touches `data/`, `contracts/`, `chelonia.json`, `chel.toml` or
-`.keys/`, which are all gitignored. That matters: accounts keep using the
-contract version they were made with, so wiping those breaks every account.
-If a contract changed without a version bump, the build stops and the old
-version keeps running.
+`data/`, `chelonia.json`, `chel.toml` and `.keys/` are gitignored, so the
+checkout leaves them alone. The build pins the current contract version into
+`contracts/`, and never removes an older one. That matters: accounts keep
+using the contract version they were made with, so wiping any of these
+breaks every account. If a contract changed without a version bump, the build
+stops and the old version keeps running.
+
+The new build goes into `dist-next/` and is swapped in just before the
+restart, so the page stays up while it builds.
 
 The workflow does nothing until these are set under Settings → Secrets and
 variables → Actions:

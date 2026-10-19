@@ -13,7 +13,12 @@ cd "$(dirname "$0")/.."
 git fetch --quiet origin
 git checkout --quiet --detach "${1:-origin/main}"
 npm ci
-# Stops here, with the old version still running, if a contract changed
-# without a version bump.
-npm run build
+# Built next to dist/ rather than into it: Vite empties its folder first, and
+# the running server would answer 404 for the whole build. Stops here, with
+# the old version still running, if a contract changed without a version bump.
+npm run build -- --outDir dist-next
+rm -rf dist.old
+if [ -d dist ]; then mv dist dist.old; fi
+mv dist-next dist
 systemctl --user restart todomvc
+rm -rf dist.old

@@ -36,6 +36,13 @@ jobs:
             echo "DEMO_HOST is not set, so there is nowhere to deploy."
             exit 0
           fi
+          # Half set up is a mistake, so it fails, and says which one is missing
+          for name in SSH_USER SSH_KEY KNOWN_HOSTS; do
+            if [ -z "$(printenv "$name")" ]; then
+              echo "DEMO_HOST is set but the secret for $name is not. See docs/hosting.md."
+              exit 1
+            fi
+          done
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/demo
           chmod 600 ~/.ssh/demo

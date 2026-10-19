@@ -86,6 +86,17 @@ test('offline, the queue fills, and it says how many went out once back', async 
   await expect(card(page, 'synced').locator('.evidence')).toHaveText('The 1 waiting change went out.')
 })
 
+test('the offline card stays closed until the server is back', async ({ page, context }) => {
+  await signup(page)
+  await context.setOffline(true)
+  await expect(card(page, 'offline')).toBeVisible()
+  await page.getByRole('button', { name: 'Hide this explanation' }).click()
+
+  await addTodo(page, 'written after closing it')
+  await expect(page.locator('.todo-notice')).toContainText('1 waiting')
+  await expect(page.locator('.explainer-card')).toBeHidden()
+})
+
 test('turned off, it stays off after a reload', async ({ page }) => {
   await page.goto('/app/')
   await page.getByRole('button', { name: 'turn off' }).click()

@@ -1,8 +1,8 @@
 import { reactive, watch } from 'vue'
 import { connection } from './chelonia/connection.ts'
 import { readInvite } from './chelonia/lists.ts'
-import { pendingWrites } from './chelonia/offline.ts'
-import { appearsIn, requestMark, requestsSince } from './chelonia/requests.ts'
+import { pendingWrites, rejectedWriteMessage } from './chelonia/offline.ts'
+import { appearsIn, collectRequests } from './chelonia/requests.ts'
 import type { SentRequest } from './chelonia/requests.ts'
 
 // The "How it works" panel. Each step shows what Chelonia just did, using the
@@ -28,9 +28,12 @@ const readEnabled = (): boolean => {
   }
 }
 
-export const explainer = reactive<{ enabled: boolean, step: Step | null }>({
+// `shown` counts the steps, so the card remounts and plays again even when a
+// step is the same as the one before, like sharing the same invite twice.
+export const explainer = reactive<{ enabled: boolean, step: Step | null, shown: number }>({
   enabled: readEnabled(),
-  step: { kind: 'welcome' }
+  step: { kind: 'welcome' },
+  shown: 0
 })
 
 export function setExplainer (enabled: boolean): void {
@@ -42,16 +45,21 @@ export function setExplainer (enabled: boolean): void {
   }
 }
 
-const show = (step: Step): void => { explainer.step = step }
-export const closeStep = (): void => { explainer.step = null }
+const show = (step: Step): void => {
+  explainer.shown++
+  explainer.step = step
+}
+
+// Closing the offline card keeps it closed until the server is back, rather
+// than having it open again with the next change made offline.
+let offlineClosed = false
+export const closeStep = (): void => {
+  if (explainer.step?.kind === 'offline') offlineClosed = true
+  explainer.step = null
+}
 export const resetExplainer = (): void => show({ kind: 'welcome' })
 
-// Runs an action and hands back its result with the requests sent meanwhile.
-export async function tracked <T> (action: () => Promise<T>): Promise<[T, SentRequest[]]> {
-  const mark = requestMark()
-  const result = await action()
-  return [result, requestsSince(mark)]
-}
+export const tracked = collectRequests
 
 // A serialized key with its secret half, as invite links carry it, is
 // `[algorithm, null, secret]`. The secret half is what must not go out.
@@ -94,11 +102,16 @@ let queued = 0
 watch(() => [connection.online, pendingWrites().length] as const, ([online, waiting]) => {
   if (!online) {
     queued = Math.max(queued, waiting)
-    if (explainer.step?.kind !== 'offline') show({ kind: 'offline' })
+    if (!offlineClosed && explainer.step?.kind !== 'offline') show({ kind: 'offline' })
     return
   }
+  offlineClosed = false
   if (explainer.step?.kind === 'offline' && waiting === 0) {
-    show({ kind: 'synced', count: queued })
+    const sent = queued
     queued = 0
+    // The queue also empties when the server refuses a write, which went
+    // nowhere. The todo list says so already, so the card just closes.
+    if (rejectedWriteMessage()) explainer.step = null
+    else show({ kind: 'synced', count: sent })
   }
 })
