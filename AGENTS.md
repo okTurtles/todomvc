@@ -24,7 +24,7 @@ docs/data.md                the todos slot and the writes, with code
 docs/login.md               signup and login, step by step
 docs/sharing.md             how sharing works, message by message
 docs/hosting.md             running the public demo
-deploy/                     its deploy script, service and Caddyfile
+deploy/deploy.sh            builds a version in the demo's container on turtledock
 ```
 
 The app is TypeScript, checked with `npm run typecheck`. The two files under

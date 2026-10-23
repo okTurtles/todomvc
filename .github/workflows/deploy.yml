@@ -8,8 +8,8 @@ on:
     types: [completed]
     branches: [main]
 
-# Nothing is checked out here: the server builds the commit itself, so the
-# contract signing key never has to leave it.
+# Nothing is checked out here: the server builds the commit itself, in the
+# todomvc container, so the contract signing key never has to leave it.
 permissions: {}
 
 concurrency:
@@ -22,7 +22,7 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     steps:
-      - name: Run deploy/deploy.sh on the server
+      - name: Build the commit in the todomvc container, then restart it
         # Passed as environment variables, not pasted into the script, so a
         # value can't change what the script does.
         env:
@@ -31,6 +31,11 @@ jobs:
           SSH_KEY: ${{ secrets.DEMO_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEMO_KNOWN_HOSTS }}
           COMMIT: ${{ github.event.workflow_run.head_sha }}
+          # Where turtledock's server installer puts it, from the user's home,
+          # and the environment it sets up. ENV is given here because an SSH
+          # command doesn't read ~/.zshrc, where the server sets it.
+          TURTLEDOCK_DIR: docker/turtledock
+          TURTLEDOCK_ENV: production
         run: |
           if [ -z "$HOST" ]; then
             echo "DEMO_HOST is not set, so there is nowhere to deploy."
@@ -47,4 +52,9 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/demo
           chmod 600 ~/.ssh/demo
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/demo "$SSH_USER@$HOST" "todomvc/deploy/deploy.sh $COMMIT"
+          # HIDE_EXPORTS keeps ./cmd from listing the server's secret names in
+          # this public log
+          ssh -i ~/.ssh/demo "$SSH_USER@$HOST" "cd $TURTLEDOCK_DIR \
+            && export ENV=$TURTLEDOCK_ENV HIDE_EXPORTS=1 \
+            && ./cmd compose exec -T todomvc runuser -u unpriv -- deploy/deploy.sh $COMMIT \
+            && ./cmd service restart todomvc"

@@ -1,9 +1,0 @@
-# HTTPS for the demo. Caddy gets the certificate by itself; replace the domain
-# with the real one. reverse_proxy passes the websocket through as it is.
-todomvc.example.org {
-	reverse_proxy 127.0.0.1:8000 {
-		# chel limits signups per address and takes the address from this
-		# header, so the proxy has to set it rather than pass on the client's
-		header_up X-Real-IP {remote_host}
-	}
-}
