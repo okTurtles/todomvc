@@ -15,6 +15,7 @@ import { connection } from '../chelonia/connection.ts'
 import { rejectedWriteMessage } from '../chelonia/offline.ts'
 import { MAX_TITLE_LENGTH, sortedTodos } from '../chelonia/todos-model.ts'
 import type { SortedTodo } from '../types.ts'
+import { explainTodo, tracked } from '../explainer.ts'
 
 const props = defineProps({
   listId: { type: String, required: true }
@@ -85,7 +86,10 @@ function add (): void {
   const title = newTitle.value.trim()
   if (!title) return
   newTitle.value = ''
-  run(() => createTodo(props.listId, title))
+  run(async () => {
+    const [, requests] = await tracked(() => createTodo(props.listId, title))
+    explainTodo(title, requests)
+  })
 }
 
 function startEditing (todo: SortedTodo): void {

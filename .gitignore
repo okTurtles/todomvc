@@ -4,6 +4,9 @@ node_modules/
 # anchored with a leading slash. Without it `contracts/` would also match
 # `src/contracts/`, which holds the contract source.
 /dist/
+# deploy/deploy.sh builds here, then swaps it in
+/dist-next/
+/dist.old/
 /build/
 /data/
 
