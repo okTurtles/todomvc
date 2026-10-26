@@ -20,11 +20,11 @@ src/types.ts                the shapes the app passes around
 src/components/             Vue, and nothing else
 scripts/build-contracts.ts  chel manifest -> chel pin -> manifest CID
 scripts/chel.ts             runs chel from node_modules
+scripts/dist.sh             makes the release file that the demo's server runs
 docs/data.md                the todos slot and the writes, with code
 docs/login.md               signup and login, step by step
 docs/sharing.md             how sharing works, message by message
 docs/hosting.md             running the public demo
-deploy/deploy.sh            builds a version in the demo's container on turtledock
 ```
 
 The app is TypeScript, checked with `npm run typecheck`. The two files under
