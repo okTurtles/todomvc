@@ -21,6 +21,10 @@ export function watchConnection (): void {
   sbp('okTurtles.events/on', PUBSUB_RECONNECTION_SCHEDULED, lost)
   sbp('okTurtles.events/on', PUBSUB_RECONNECTION_ATTEMPT, lost)
   sbp('okTurtles.events/on', PUBSUB_RECONNECTION_FAILED, lost)
+  // When the browser itself goes offline, Chelonia closes the socket but only
+  // queues a retry to a server at localhost, so on any other domain none of
+  // the events above comes. Back online, it reconnects and the one below does.
+  window.addEventListener('offline', lost)
   // Also fires on the first open, not just on a reconnect.
   sbp('okTurtles.events/on', PUBSUB_RECONNECTION_SUCCEEDED, () => {
     connection.online = true

@@ -3,6 +3,26 @@
 
 import { expect, test } from '@playwright/test'
 import { addTodo, login, loginForm, signup, titles } from './helpers.ts'
+import { PORT } from './ports.ts'
+
+// While the browser is offline, Chelonia only schedules a reconnection to a
+// server at localhost or 127.0.0.1, which is what the other tests use. Any
+// other name, like the public demo's, has to work without it.
+test('going offline shows on a domain that is not localhost too', async ({ page, context }) => {
+  await page.goto(`http://todomvc.localhost:${PORT}/app/`)
+  await signup(page)
+  await addTodo(page, 'written while connected')
+
+  await context.setOffline(true)
+  await expect(page.locator('.todo-notice')).toContainText('Not connected')
+  await addTodo(page, 'written while offline')
+  await expect(page.locator('.todo-notice')).toContainText('1 waiting')
+
+  await context.setOffline(false)
+  await expect(page.locator('.todo-notice')).toBeHidden()
+  await page.reload()
+  await expect(titles(page)).toHaveText(['written while connected', 'written while offline'])
+})
 
 test('a change made while the server is unreachable is sent once it is back', async ({ page, context }) => {
   await signup(page)
@@ -143,6 +163,8 @@ test('a queued write the server refuses is dropped and reported', async ({ page,
   await expect(titles(page)).toHaveText([])
   await expect(page.locator('.todo-status')).toBeHidden()
   await expect(page.locator('.todo-notice')).toBeHidden()
+  // The How it works panel must not say it went out
+  await expect(page.locator('.explainer-card')).toBeHidden()
 
   // The notice is about a write that no longer exists, so it must not come
   // back from the saved state on the next visit.
