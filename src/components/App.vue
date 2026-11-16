@@ -4,8 +4,10 @@ import type { PropType } from 'vue'
 import { currentUsername, logout, pendingWrites, state } from '../chelonia/index.ts'
 import { currentLists, listIsPending, readInvite } from '../chelonia/lists.ts'
 import type { ContractID, Lists } from '../types.ts'
+import { resetExplainer } from '../explainer.ts'
 import AccountPanel from './AccountPanel.vue'
 import AuthView from './AuthView.vue'
+import Explainer from './Explainer.vue'
 import JoinView from './JoinView.vue'
 import ListsBar from './ListsBar.vue'
 import TodoApp from './TodoApp.vue'
@@ -24,8 +26,13 @@ const showAccount = ref(false)
 // A list that was just joined has no keys yet, so nothing about it can be read.
 const pending = computed(() => !!selectedListId.value && listIsPending(selectedListId.value))
 
-// The panel must not still be open for whoever logs in next.
-watch(loggedIn, (open) => { if (!open) showAccount.value = false })
+// The panel must not still be open for whoever logs in next, and the
+// explanation starts over for them too.
+watch(loggedIn, (open) => {
+  if (open) return
+  showAccount.value = false
+  resetExplainer()
+})
 
 // Lists arrive after login and can arrive later still, when another tab adds
 // one or an invite is answered.
@@ -87,4 +94,5 @@ async function onLogout (): Promise<void> {
       <button type="button" class="link" @click="onLogout">log out</button>
     </footer>
   </main>
+  <Explainer />
 </template>

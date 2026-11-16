@@ -2,6 +2,7 @@ import sbp from '@sbp/sbp'
 import '@chelonia/lib'
 import { isRawEncryptedData } from '@chelonia/lib/encryptedData'
 import manifestsFile from '../contracts/manifests.json'
+import { sendRequest } from './requests.ts'
 import './state.ts'
 
 export const CONTRACT_NAME = 'todomvc/identity'
@@ -17,6 +18,8 @@ export async function configureChelonia (): Promise<void> {
   await sbp('chelonia/configure', {
     connectionURL: API_URL,
     stateSelector: 'todomvc/state',
+    // So the explainer can show what was sent. See requests.ts.
+    fetch: sendRequest,
     contracts: {
       // manifests.json is written by `npm run contracts`. Chelonia refuses to
       // load a contract whose manifest CID is not listed here.

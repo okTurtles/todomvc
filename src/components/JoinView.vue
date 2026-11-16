@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { PropType } from 'vue'
 import { acceptInvite, clearInvite } from '../chelonia/lists.ts'
 import type { ContractID, Invite } from '../types.ts'
+import { explainJoin, tracked } from '../explainer.ts'
 
 const props = defineProps({
   invite: { type: Object as PropType<Invite>, required: true }
@@ -16,7 +17,9 @@ async function join (): Promise<void> {
   error.value = ''
   busy.value = true
   try {
-    done(await acceptInvite(props.invite))
+    const [contractID, requests] = await tracked(() => acceptInvite(props.invite))
+    explainJoin(props.invite.secret, requests)
+    done(contractID)
   } catch (e) {
     error.value = 'Could not join. The invite may be used up, or the server is unreachable.'
     console.error('[todomvc] join failed', e)

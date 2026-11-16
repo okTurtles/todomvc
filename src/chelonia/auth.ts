@@ -10,6 +10,7 @@ import sbp from '@sbp/sbp'
 import { Secret } from '@chelonia/lib/Secret'
 import { encryptedIncomingData, encryptedOutgoingDataWithRawKey } from '@chelonia/lib/encryptedData'
 import { blake32Hash, bytesToB64 } from '@chelonia/lib/functions'
+import { isValidUsername } from '@chelonia/lib/names'
 import {
   base64ToBase64url,
   boxKeyPair,
@@ -38,6 +39,7 @@ import {
   createList, currentLists, keyIdByName, loadLists, requireIdentity, retainOrSync
 } from './lists.ts'
 import { dropPendingWrites, loadOfflineQueue } from './offline.ts'
+import { sendRequest } from './requests.ts'
 import { clearSavedState, persistState, state } from './state.ts'
 import type { ContractID } from '../types.ts'
 
@@ -74,15 +76,11 @@ const openDeletionToken = (
     { [keyId(IEK)]: IEK }, 'encryptedDeletionToken'
   ).valueOf() as string
 
-// TODO: BEGIN REMOVEME (copy of chel's private NAME_REGEX, until chel exports it)
-// Copied from NAME_REGEX in chel's src/serve/routes.ts. The server rejects
-// anything else with a 400, so check here first to give a usable message.
-// Lowercase only, cannot start or end with - or _, and no repeated separator.
-const USERNAME_REGEX = /^(?![_-])((?!([_-])\2)[a-z\d_-]){1,80}(?<![_-])$/
-// TODO: END REMOVEME (copy of chel's private NAME_REGEX, until chel exports it)
-
+// isValidUsername is the rule chel itself checks names with. The server
+// rejects anything else with a 400, so check here first to give a usable
+// message.
 function assertUsername (username: string): void {
-  if (!USERNAME_REGEX.test(username)) {
+  if (!isValidUsername(username)) {
     throw new AuthError(
       'Usernames can use lowercase letters, numbers, hyphen and underscore, up ' +
       'to 80 characters. They cannot start or end with a hyphen or underscore, ' +
@@ -95,7 +93,7 @@ function assertUsername (username: string): void {
 // 500, means the server did answer.
 async function send (path: string, init?: RequestInit): Promise<Response> {
   try {
-    return await fetch(`${API_URL}${path}`, init)
+    return await sendRequest(`${API_URL}${path}`, init)
   } catch (e) {
     throw new AuthError('Could not reach the server. Check your connection.', {
       cause: e, exact: true

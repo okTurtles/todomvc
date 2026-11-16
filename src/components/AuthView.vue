@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { AuthError, login, signup } from '../chelonia/index.ts'
+import { explainKeys, tracked } from '../explainer.ts'
 
 defineProps({
   // Arrived on an invite link, so say what the account is for before asking
@@ -19,7 +20,9 @@ async function submit (): Promise<void> {
   busy.value = true
   try {
     const credentials = { username: username.value.trim(), password: password.value }
-    await (mode.value === 'signup' ? signup(credentials) : login(credentials))
+    const isSignup = mode.value === 'signup'
+    const [, requests] = await tracked(() => isSignup ? signup(credentials) : login(credentials))
+    explainKeys(isSignup, requests, credentials.password)
     password.value = ''
   } catch (e) {
     error.value = e instanceof AuthError ? e.message : 'Something went wrong. Check the console.'
@@ -40,6 +43,10 @@ async function submit (): Promise<void> {
       Your keys are generated in this browser. The todos are encrypted before
       they reach the server.
     </p>
+    <p class="auth-demo">
+      This is a demo: accounts and todos may be reset, so don't use a password
+      you use anywhere else.
+    </p>
 
     <label>
       Username
@@ -50,9 +57,10 @@ async function submit (): Promise<void> {
         required
       >
       <!-- No `pattern` attribute: it compiles with the regex `v` flag, where
-           the `[_-]` classes in USERNAME_REGEX are a syntax error, and a
+           the `[_-]` classes in the username regex are a syntax error, and a
            pattern that fails to compile is dropped without warning. signup()
-           and login() check the same rule in JS instead. -->
+           and login() check the same rule in JS instead, with isValidUsername
+           from @chelonia/lib. -->
       <small v-if="mode === 'signup'">
         lowercase letters, numbers, hyphen and underscore
       </small>

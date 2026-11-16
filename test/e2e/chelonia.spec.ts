@@ -126,19 +126,51 @@ for (const [status, message] of [
   })
 }
 
-test('a username the server would reject is caught before any request', async ({ page }) => {
+// The rule is isValidUsername from @chelonia/lib, the one chel checks names
+// with. Each way a name can break it is caught before anything is sent.
+for (const [why, username] of [
+  ['an uppercase letter', 'Alice'],
+  ['a hyphen at the start', '-alice'],
+  ['an underscore at the end', 'alice_'],
+  ['the same separator twice', 'al--ice'],
+  ['81 characters', 'a'.repeat(81)]
+] as const) {
+  test(`a username with ${why} is caught before any request`, async ({ page }) => {
+    await page.goto('/app/')
+    await page.getByRole('button', { name: 'Create an account' }).click()
+
+    let requested = false
+    await page.route(/\/(name|zkpp)\//, (route) => { requested = true; route.continue() })
+
+    await page.getByLabel('Username').fill(username)
+    await page.getByLabel('Password').fill(PASSWORD)
+    await page.getByRole('button', { name: 'Create account' }).click()
+
+    await expect(page.locator('.auth-error')).toContainText('lowercase letters')
+    expect(requested).toBe(false)
+  })
+}
+
+test('a bad username is caught at login too, before any request', async ({ page }) => {
   await page.goto('/app/')
-  await page.getByRole('button', { name: 'Create an account' }).click()
 
   let requested = false
-  await page.route('**/zkpp/**', (route) => { requested = true; route.continue() })
+  await page.route(/\/(name|zkpp)\//, (route) => { requested = true; route.continue() })
 
   await page.getByLabel('Username').fill('Alice')
   await page.getByLabel('Password').fill(PASSWORD)
-  await page.getByRole('button', { name: 'Create account' }).click()
+  await page.getByRole('button', { name: 'Log in' }).click()
 
   await expect(page.locator('.auth-error')).toContainText('lowercase letters')
   expect(requested).toBe(false)
+})
+
+test('the longest username the rule allows can sign up', async ({ page }) => {
+  // 80 characters, with both separators in it: the app lets it through and
+  // the server takes it, so the two agree at the limit
+  const username = `${newUsername()}_`.padEnd(80, 'x')
+  expect(username).toHaveLength(80)
+  await signup(page, username)
 })
 
 test('two browsers on the same account converge', async ({ browser }) => {
