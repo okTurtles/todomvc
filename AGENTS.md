@@ -73,11 +73,10 @@ against a manifest the accounts already on the server do not have.
 
 ## Workarounds waiting on an upstream release
 
-Each one is fenced in the source with `TODO: BEGIN REMOVEME (issue)` and
-`TODO: END REMOVEME (issue)`, so `grep REMOVEME` finds them all.
+A workaround that will go away is fenced in the source with
+`TODO: BEGIN REMOVEME (issue)` and `TODO: END REMOVEME (issue)`, so
+`grep REMOVEME` finds them all. There are none right now.
 
-- `src/chelonia/auth.ts`, `USERNAME_REGEX`: a copy of chel's private
-  `NAME_REGEX`. Goes once chel exports the rule.
 - `src/chelonia/auth.ts`, the key list in `signup`: gets shorter once
   [libcheloniajs#91](https://github.com/okTurtles/libcheloniajs/issues/91)
   lands. Not a removal, so it is a plain TODO.

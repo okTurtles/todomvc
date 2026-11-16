@@ -126,6 +126,6 @@ knows the password.
    created them, and are left alone.
 4. Log out locally.
 
-The username stays taken. In chel 3.4.0 the name keeps pointing at the deleted
+The username stays taken. In chel 3.5.0 the name keeps pointing at the deleted
 contract and is reported as orphaned, and there is nothing that later frees it,
 so signing up again with the same name is refused.

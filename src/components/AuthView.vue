@@ -57,9 +57,10 @@ async function submit (): Promise<void> {
         required
       >
       <!-- No `pattern` attribute: it compiles with the regex `v` flag, where
-           the `[_-]` classes in USERNAME_REGEX are a syntax error, and a
+           the `[_-]` classes in the username regex are a syntax error, and a
            pattern that fails to compile is dropped without warning. signup()
-           and login() check the same rule in JS instead. -->
+           and login() check the same rule in JS instead, with isValidUsername
+           from @chelonia/lib. -->
       <small v-if="mode === 'signup'">
         lowercase letters, numbers, hyphen and underscore
       </small>

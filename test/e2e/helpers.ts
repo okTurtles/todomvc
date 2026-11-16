@@ -5,9 +5,9 @@ export const PASSWORD = 'todomvc-e2e-password'
 
 let counter = 0
 
-// chel's NAME_REGEX allows lowercase letters, digits, hyphen and underscore,
-// and no repeated separator. Every test makes its own account so one test
-// cannot see another's todos.
+// Usernames (isValidUsername in @chelonia/lib, which chel checks too) allow
+// lowercase letters, digits, hyphen and underscore, and no repeated separator.
+// Every test makes its own account so one test cannot see another's todos.
 export const newUsername = () =>
   `e2e-${Date.now().toString(36)}-${(counter++).toString(36)}`
 
