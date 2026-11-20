@@ -1,5 +1,5 @@
-import { KV_NOOP } from '@chelonia/lib/kv-constants'
-import type { NewTodo, Reducer, SortedTodo, Todo, Todos } from '../types.ts'
+import { KV_NOOP, type KvNoop } from '@chelonia/lib/kv-constants'
+import type { NewTodo, PendingWrite, Reducer, SortedTodo, Todo, Todos } from '../types.ts'
 
 export const MAX_TITLE_LENGTH = 512
 
@@ -100,6 +100,30 @@ export const storedWrite = (op: string, args: unknown[]): Reducer<Todos> | null 
   // hasOwn, so a name like 'toString' isn't found on the object's prototype
   const check = Object.hasOwn(WRITES, op) ? WRITES[op] : undefined
   return check ? check(args) : null
+}
+
+// Applies queued writes in the order they were made. The offline queue sends
+// all of a list's waiting writes this way as one update, and the list shows
+// the same thing until then. Applied one by one, a tick on a todo made offline
+// would find no todo to tick, since the server doesn't have it yet.
+//
+// A write that can't be read back, or that would make the list invalid, is
+// left out rather than failing the others. KV_NOOP when nothing changes.
+export function applyWrites (
+  todos: Todos,
+  writes: readonly Pick<PendingWrite, 'op' | 'args'>[]
+): Todos | KvNoop {
+  let value = todos
+  for (const { op, args } of writes) {
+    const next = storedWrite(op, args)?.(value)
+    if (next === undefined || next === KV_NOOP) continue
+    try {
+      value = todosSchema.parse(next)
+    } catch (e) {
+      console.warn(`[todomvc] left out a queued ${op} that would make the list invalid`, e)
+    }
+  }
+  return value === todos ? KV_NOOP : value
 }
 
 // The slot value is a plain object, so order is not something to rely on.
