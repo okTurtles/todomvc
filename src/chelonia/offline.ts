@@ -104,6 +104,21 @@ export async function loadOfflineQueue (isOurs: (contractID: ContractID) => bool
   )
 }
 
+// A list's writes still in the queue, oldest first. Read from the queue itself
+// rather than from state.pendingWrites, which is still empty while `load` is
+// sending the writes stored by the last visit.
+export const queuedWrites = (contractID: ContractID): PendingWrite[] =>
+  queuedActions()
+    .filter(({ invocation }) => invocation[1] === contractID)
+    .map(({ id, invocation: [, , op, ...args] }) => ({ id, contractID, op, args }))
+
+// For writes the server now has, so they are neither sent again nor shown on
+// top of the value that already has them.
+export async function forgetWrites (ids: readonly string[]): Promise<void> {
+  for (const id of ids) await sbp('chelonia.persistentActions/cancel', id)
+  state.pendingWrites = pendingWrites().filter((w) => !ids.includes(w.id))
+}
+
 export function queueWrite (invocation: unknown[], write: Omit<PendingWrite, 'id'>): void {
   delete state.rejectedWrite
   const [id] = sbp('chelonia.persistentActions/enqueue', invocation) as string[]

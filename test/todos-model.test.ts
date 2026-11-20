@@ -3,6 +3,8 @@ import { test } from 'node:test'
 import { KV_NOOP } from '@chelonia/lib/kv-constants'
 import {
   addTodo,
+  applyWrites,
+  MAX_TITLE_LENGTH,
   removeCompleted,
   removeTodo,
   setAllCompleted,
@@ -118,4 +120,45 @@ test('storedWrite refuses a queued write that does not check out', () => {
   for (const [op, args] of refused) {
     assert.equal(storedWrite(op, args), null, `${op}(${JSON.stringify(args)})`)
   }
+})
+
+const newTodo = { id: 'n', title: 'made offline', createdDate: '2026-08-04T11:00:00.000Z' }
+
+test('applyWrites applies a list of queued writes in order', () => {
+  // Each one depends on the one before it: none of them would find the todo
+  // if it ran on its own against the starting value
+  const todos = { a: todo() }
+  const result = applied(applyWrites(todos, [
+    { op: 'addTodo', args: [newTodo] },
+    { op: 'setCompleted', args: ['n', true] },
+    { op: 'setTitle', args: ['n', 'renamed'] }
+  ]))
+  assert.deepEqual(result, {
+    a: todo(),
+    n: { title: 'renamed', completed: true, createdDate: newTodo.createdDate }
+  })
+  assert.deepEqual(todos, { a: todo() }, 'the value passed in is not changed')
+})
+
+test('applyWrites gives KV_NOOP when nothing changes', () => {
+  assert.equal(applyWrites({ a: todo() }, []), KV_NOOP)
+  assert.equal(applyWrites({ a: todo() }, [{ op: 'setCompleted', args: ['missing', true] }]), KV_NOOP)
+})
+
+test('applyWrites leaves out a write it cannot use, and keeps the rest', () => {
+  const result = applied(applyWrites({}, [
+    { op: 'addTodo', args: [newTodo] },
+    { op: 'dropTable', args: [] },
+    // Would make the list invalid
+    { op: 'setTitle', args: ['n', 'x'.repeat(MAX_TITLE_LENGTH + 1)] },
+    { op: 'setCompleted', args: ['n', true] }
+  ]))
+  assert.deepEqual(result, { n: { title: 'made offline', completed: true, createdDate: newTodo.createdDate } })
+})
+
+test('applyWrites ends with nothing for a todo made and deleted offline', () => {
+  assert.deepEqual(applied(applyWrites({}, [
+    { op: 'addTodo', args: [newTodo] },
+    { op: 'removeTodo', args: ['n'] }
+  ])), {})
 })
