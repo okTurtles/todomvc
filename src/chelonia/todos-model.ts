@@ -109,6 +109,11 @@ export const storedWrite = (op: string, args: unknown[]): Reducer<Todos> | null 
 //
 // A write that can't be read back, or that would make the list invalid, is
 // left out rather than failing the others. KV_NOOP when nothing changes.
+//
+// The list on screen runs this again on every change while a write waits, so
+// each invalid write is only reported the first time.
+const reported = new Set<string>()
+
 export function applyWrites (
   todos: Todos,
   writes: readonly Pick<PendingWrite, 'op' | 'args'>[]
@@ -120,6 +125,9 @@ export function applyWrites (
     try {
       value = todosSchema.parse(next)
     } catch (e) {
+      const key = `${op}:${JSON.stringify(args)}`
+      if (reported.has(key)) continue
+      reported.add(key)
       console.warn(`[todomvc] left out a queued ${op} that would make the list invalid`, e)
     }
   }

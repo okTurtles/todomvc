@@ -156,6 +156,21 @@ test('applyWrites leaves out a write it cannot use, and keeps the rest', () => {
   assert.deepEqual(result, { n: { title: 'made offline', completed: true, createdDate: newTodo.createdDate } })
 })
 
+test('applyWrites reports an invalid write only the first time', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {})
+  // Not the same write as in the test above, which has already been reported
+  const writes = [
+    { op: 'addTodo', args: [newTodo] },
+    { op: 'setTitle', args: ['n', 'x'.repeat(MAX_TITLE_LENGTH + 2)] }
+  ]
+  // The list on screen applies the same waiting writes again on every change
+  for (let i = 0; i < 3; i++) applied(applyWrites({}, writes))
+  assert.equal(warn.mock.callCount(), 1)
+
+  applyWrites({}, [{ op: 'addTodo', args: [{ ...newTodo, title: '' }] }])
+  assert.equal(warn.mock.callCount(), 2, 'a different invalid write is still reported')
+})
+
 test('applyWrites ends with nothing for a todo made and deleted offline', () => {
   assert.deepEqual(applied(applyWrites({}, [
     { op: 'addTodo', args: [newTodo] },
