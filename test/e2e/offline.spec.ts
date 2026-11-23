@@ -2,7 +2,7 @@
 // what is sent later and what is thrown away.
 
 import { expect, test } from '@playwright/test'
-import { addTodo, login, loginForm, signup, titles } from './helpers.ts'
+import { addTodo, items, login, loginForm, signup, titles } from './helpers.ts'
 import { PORT } from './ports.ts'
 
 // While the browser is offline, Chelonia only schedules a reconnection to a
@@ -70,11 +70,10 @@ test('several queued writes all land, in the order they were made', async ({ pag
   await expect(page.locator('.todo-list li').first()).toHaveClass(/completed/)
 })
 
-// Known gap, see docs/data.md. A todo made offline is not on the server yet,
-// so ticking it runs the reducer against a value that does not have it. That
-// comes out as a no-op, the queue counts it as done, and the tick is lost
-// without anything being said. Renaming or deleting one goes the same way.
-test.fixme('a todo made offline can be ticked off before it lands', async ({ page, context }) => {
+// A todo made offline is not on the server yet, so a tick sent on its own
+// would find no todo to tick, do nothing and be counted as done. The queue
+// sends a list's waiting writes together, in order, instead.
+test('a todo made offline can be ticked off before it lands', async ({ page, context }) => {
   await signup(page)
   await context.setOffline(true)
   await expect(page.locator('.todo-notice')).toContainText('Not connected')
@@ -88,6 +87,55 @@ test.fixme('a todo made offline can be ticked off before it lands', async ({ pag
   await expect(page.locator('.todo-notice')).toBeHidden()
   await page.reload()
   await expect(page.locator('.todo-list li').first()).toHaveClass(/completed/)
+})
+
+test('a todo made offline can be renamed or deleted before it lands', async ({ page, context }) => {
+  await signup(page)
+  await context.setOffline(true)
+  await expect(page.locator('.todo-notice')).toContainText('Not connected')
+
+  await addTodo(page, 'to rename')
+  await items(page).first().locator('label').dblclick()
+  await page.locator('.edit').fill('renamed while offline')
+  await page.locator('.edit').press('Enter')
+
+  await addTodo(page, 'to delete')
+  await items(page).last().hover()
+  await items(page).last().locator('.destroy').click()
+
+  await expect(titles(page)).toHaveText(['renamed while offline'])
+  await expect(page.locator('.todo-notice')).toContainText('4 waiting')
+
+  await context.setOffline(false)
+  await expect(page.locator('.todo-notice')).toBeHidden()
+  await page.reload()
+  await expect(titles(page)).toHaveText(['renamed while offline'])
+})
+
+// The socket is still up here, only the todo writes get no answer, so the app
+// thinks it is online. A change made then still has to wait behind the queued
+// ones, or it would be sent on its own against a value without them.
+test('a change made while earlier ones are still waiting goes behind them', async ({ page }) => {
+  await signup(page)
+
+  let refuse = true
+  await page.route('**/kv/**', (route) => refuse && route.request().method() === 'POST'
+    ? route.abort('connectionfailed')
+    : route.continue())
+
+  await addTodo(page, 'queued while online')
+  await expect(page.locator('.todo-status')).toContainText('Sending 1 change')
+  await items(page).first().locator('.toggle').click()
+  await expect(page.locator('.todo-status')).toContainText('Sending 2 changes')
+  await expect(items(page).first()).toHaveClass(/completed/)
+
+  // Retried on a timer, so this waits longer than the rest.
+  refuse = false
+  await expect(page.locator('.todo-status')).toBeHidden({ timeout: 45_000 })
+
+  await page.reload()
+  await expect(titles(page)).toHaveText(['queued while online'])
+  await expect(items(page).first()).toHaveClass(/completed/)
 })
 
 // The saved state would otherwise render the last known todos as though they

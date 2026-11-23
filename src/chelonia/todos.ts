@@ -5,13 +5,14 @@ import type { ChelContractState, KvMirrorEntry } from '@chelonia/lib/types'
 import { LIST_CONTRACT_NAME } from './config.ts'
 import { connection } from './connection.ts'
 import { currentLists } from './lists.ts'
-import { pendingWrites, queueWrite } from './offline.ts'
+import { forgetWrites, pendingWrites, queuedWrites, queueWrite } from './offline.ts'
 import { state } from './state.ts'
-import { storedWrite, todosSchema } from './todos-model.ts'
+import { applyWrites, storedWrite, todosSchema } from './todos-model.ts'
 import type { ContractID, Todos } from '../types.ts'
 
 const TODOS_KEY = 'todos'
 const NO_TODOS: Todos = Object.freeze({})
+const QUEUED_WRITE = 'todomvc/todos/write'
 
 // One declaration covers the first fetch, the pubsub subscription, the local
 // mirror, schema validation and the conflict retries.
@@ -35,18 +36,9 @@ export function defineTodosSlot (): void {
   })
 
   sbp('sbp/selectors/register', {
-    'todomvc/todos/write': (contractID: ContractID, op: string, ...args: unknown[]) => {
-      // A queued write comes back from JSON, so it is only as good as what
-      // was stored. Throwing something other than a TypeError keeps a bad one
-      // out of the offline queue.
-      const updater = storedWrite(op, args)
-      if (!updater) throw new Error(`Invalid todo write: ${op}`)
-      return sbp('chelonia/kv/update', {
-        contractID,
-        key: TODOS_KEY,
-        updater
-      })
-    }
+    // Each queued write is stored as a call to this, but whichever one runs
+    // sends every write still waiting for that list. See sendQueued.
+    [QUEUED_WRITE]: (contractID: ContractID) => sendQueued(contractID)
   })
 
   // A value that fails the schema never reaches the app: the mirror keeps the
@@ -69,16 +61,8 @@ export function currentTodos (contractID: ContractID | null): Todos {
   const entry = mirrorEntry(contractID)
   if (!entry) return NO_TODOS
   const saved = (entry.value ?? sbp('chelonia/kv/read', contractID, TODOS_KEY)) as Todos
-  return pendingWrites()
-    .filter((w) => w.contractID === contractID)
-    .reduce<Todos>((todos, w) => {
-      // Skipped rather than thrown: this runs inside a computed, and one bad
-      // entry read back from storage would take the whole list down.
-      const reducer = storedWrite(w.op, w.args)
-      if (!reducer) return todos
-      const next = reducer(todos)
-      return next === KV_NOOP ? todos : next as Todos
-    }, saved)
+  const next = applyWrites(saved, pendingWrites().filter((w) => w.contractID === contractID))
+  return next === KV_NOOP ? saved : next
 }
 
 // 'non-init' | 'loading' | 'loaded' | 'error'
@@ -93,17 +77,49 @@ const mirrorEntry = (contractID: ContractID | null): KvMirrorEntry | undefined =
   contractID ? state._kv?.[contractID]?.[TODOS_KEY] : undefined
 
 // Goes straight to the server when it is there. Otherwise, or when the request
-// fails before an answer, the write is queued and sent later.
+// fails before an answer, the write is queued and sent later. It also queues
+// behind writes still waiting for the same list, since on its own it would be
+// applied to a value that doesn't have them yet.
 async function write (contractID: ContractID, op: string, ...args: unknown[]): Promise<void> {
-  const invocation = ['todomvc/todos/write', contractID, op, ...args]
-  if (!connection.online) return queueWrite(invocation, { contractID, op, args })
+  const invocation = [QUEUED_WRITE, contractID, op, ...args]
+  const queued = { contractID, op, args }
+  if (!connection.online || pendingCount(contractID) > 0) return queueWrite(invocation, queued)
+  const updater = storedWrite(op, args)
+  if (!updater) throw new Error(`Invalid todo write: ${op}`)
   try {
-    await sbp(...invocation as [string, ...unknown[]])
+    await sbp('chelonia/kv/update', { contractID, key: TODOS_KEY, updater })
   } catch (e) {
     // fetch rejects with a TypeError when the server never answered.
     if (!(e instanceof TypeError)) throw e
-    queueWrite(invocation, { contractID, op, args })
+    queueWrite(invocation, queued)
   }
+}
+
+// Sends every write waiting for a list as one update, in the order they were
+// made, so each one is applied after the ones before it. The queue tries each
+// write on its own (right away, on a timer, and all at once when the
+// connection is back), so sends are kept one at a time per list: a try that
+// starts while another is out then finds the writes already sent.
+//
+// A TypeError (no answer) keeps the writes queued. Anything else is the
+// server refusing them, and the queue's failure handler drops the write it
+// was trying.
+const sending = new Map<ContractID, Promise<void>>()
+
+function sendQueued (contractID: ContractID): Promise<void> {
+  const send = async () => {
+    const writes = queuedWrites(contractID)
+    if (writes.length === 0) return
+    await sbp('chelonia/kv/update', {
+      contractID,
+      key: TODOS_KEY,
+      updater: (todos: Todos) => applyWrites(todos, writes)
+    })
+    await forgetWrites(writes.map((w) => w.id))
+  }
+  const run = (sending.get(contractID) ?? Promise.resolve()).catch(() => {}).then(send)
+  sending.set(contractID, run)
+  return run
 }
 
 // Not crypto.randomUUID: that needs a secure context, and opening the demo

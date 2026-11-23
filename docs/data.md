@@ -56,16 +56,20 @@ The queue stores `[selector, ...args]` as JSON, which is why writes are named
 runs. The queue lives under one localStorage key, so it survives a reload, and
 `retryAll` is called as soon as the socket is back.
 
-Until a write lands, `currentTodos` applies it on top of the mirror value, so
-the list looks the same offline as it will once the server has it. When a write
-succeeds it is taken off that overlay, on `PERSISTENT_ACTION_SUCCESS`. When the
-server refuses a write it is dropped and the list says so, because retrying
-would only get the same refusal.
+A queued write is never sent on its own. The queue tries each one right away,
+again every 15 seconds, and all of them when the socket is back, but whichever
+try runs sends every write still waiting for that list as one update, applied
+in the order they were made (`applyWrites` in `todos-model.ts`). On its own, a
+tick on a todo made offline would be applied to the value the server has,
+which doesn't have that todo yet, so it would do nothing and be lost. For the
+same reason, a write made while others for its list are still waiting goes into
+the queue behind them, even when the server is there.
 
-One case does not hold. A todo made while the server is away cannot be ticked
-off, renamed or deleted until it has landed: the change is applied to the value
-the server has, which does not have that todo in it, so it does nothing and is
-lost. `test/e2e/offline.spec.ts` has it, marked as a known gap.
+Until the writes land, `currentTodos` applies them on top of the mirror value
+the same way, so the list looks the same offline as it will once the server
+has it. Once the update lands they are taken off that overlay. When the server
+refuses a write it is dropped and the list says so, because retrying would
+only get the same refusal.
 
 Two things worth knowing about the queue:
 
